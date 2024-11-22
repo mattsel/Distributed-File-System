@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+service MasterNode {
+  rpc AssignNode(NodeAssignmentRequest) returns (NodeAssignmentResponse);
+}
+
+message NodeAssignmentRequest {
+  string chunkId = 1;
+}
+
+message NodeAssignmentResponse {
+  string nodeAddress = 1;
+}
