@@ -1,4 +1,5 @@
 syntax = "proto3";
+package GrpcFileSystem;
 
 service WorkerNode {
     rpc StoreChunk(StoreChunkRequest) returns (StoreChunkResponse);
