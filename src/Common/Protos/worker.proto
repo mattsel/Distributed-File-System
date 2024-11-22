@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+service WorkerNode {
+  rpc StoreChunk(StoreChunkRequest) returns (StoreChunkResponse);
+}
+
+message StoreChunkRequest {
+  string chunkName = 1;
+  bytes chunkData = 2;
+}
+
+message StoreChunkResponse {
+  bool status = 1;
+}
