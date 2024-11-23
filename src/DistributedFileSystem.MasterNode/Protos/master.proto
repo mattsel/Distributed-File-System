@@ -1,0 +1,42 @@
+syntax = "proto3";
+package DistributedFileSystem.MasterNode;
+
+service MasterNode {
+    rpc AssignNode(NodeAssignmentRequest) returns (NodeAssignmentResponse);
+    rpc RegisterFiles(MetadataAssignRequest) returns (MetadataAssignResponse);
+    rpc ChunkLocations(ChunkLocationsRequest) returns (ChunkLocationsResponse);
+    rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+}
+
+message NodeAssignmentRequest {
+    string chunkId = 1;
+}
+
+message NodeAssignmentResponse {
+    string nodeAddress = 1;
+}
+
+message MetadataAssignRequest {
+    string fileName = 1;
+    int32 chunkSize = 2;
+    int32 chunkAmount = 3;
+}
+
+message MetadataAssignResponse {
+    bool status = 1;
+    string message = 2;
+}
+
+message ChunkLocationsRequest {
+    string chunkId = 1;
+}
+
+message ChunkLocationsResponse {
+    repeated string nodeAddress = 1;
+}
+
+message ListFilesRequest {}
+
+message ListFilesResponse {
+    repeated string fileName = 1;
+}
