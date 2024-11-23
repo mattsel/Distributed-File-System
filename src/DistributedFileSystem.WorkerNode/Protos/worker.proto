@@ -9,7 +9,7 @@ service WorkerNode {
 }
 
 message StoreChunkRequest {
-    string chunkName = 1;
+    string chunkId = 1;
     bytes chunkData = 2;
 }
 
@@ -25,6 +25,7 @@ message GetChunkRequest {
 message GetChunkResponse {
     bool status = 1;
     string message = 2;
+    bytes chunkData = 3;
 }
 
 message DeleteChunkRequest {
