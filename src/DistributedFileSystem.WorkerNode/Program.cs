@@ -1,14 +1,22 @@
-using DistributedFileSystem.WorkerNode.Services;
+using Grpc.Core;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
+using DistributedFileSystem.WorkerNode;
+using System.Threading.Tasks;
 
-var builder = WebApplication.CreateBuilder(args);
+class Program
+{
+    public static async Task Main(string[] args)
+    {
+        var builder = WebApplication.CreateBuilder(args);
+        builder.Services.AddGrpc();
+        var app = builder.Build();
 
-// Add services to the container.
-builder.Services.AddGrpc();
+        app.MapGrpcService<WorkerNodeService>();
 
-var app = builder.Build();
+        var url = "http://localhost:5002";
+        Console.WriteLine($"Worker Node listening on {url}");
 
-// Configure the HTTP request pipeline.
-app.MapGrpcService<GreeterService>();
-app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
-
-app.Run();
+        await app.RunAsync();
+    }
+}
