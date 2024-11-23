@@ -1,5 +1,6 @@
 syntax = "proto3";
 package DistributedFileSystem.MasterNode;
+option csharp_namespace = "DistributedFileSystem.MasterNode";
 
 service MasterNode {
     rpc AssignNode(NodeAssignmentRequest) returns (NodeAssignmentResponse);
