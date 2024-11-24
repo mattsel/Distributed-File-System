@@ -1,9 +1,13 @@
-using DistributedFileSystem.WorkerNode;
-using Grpc.Core;
 using Google.Protobuf;
+using Grpc.Core;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+
+// <sumary>
+// All of the functions in this file serve as a translator for gRPC calls. When these functions are called with their required parameters,
+// it will return a RPC responses.
+// </summary>
 
 namespace DistributedFileSystem.WorkerNode.Services
 {
@@ -15,10 +19,11 @@ namespace DistributedFileSystem.WorkerNode.Services
 
         public WorkerNodeService(ILogger<WorkerNodeService> logger)
         {
-            _driveInfo = new DriveInfo(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "C" : "/");
+            _driveInfo = new DriveInfo("/");
             _logger = logger;
         }
 
+        // Stores chunks on the worker node given a unique chunk id 
         public override Task<StoreChunkResponse> StoreChunk(StoreChunkRequest request, ServerCallContext context)
         {
             _logger.LogInformation("Responding to StoreChunk call");
@@ -29,6 +34,7 @@ namespace DistributedFileSystem.WorkerNode.Services
             return Task.FromResult(new StoreChunkResponse { Status = true, Message = $"Chunk {request.ChunkId} stored successfully at {chunkFilePath}." });
         }
 
+        // Returns the chunk given the unique chunk id for a given file
         public override Task<GetChunkResponse> GetChunk(GetChunkRequest request, ServerCallContext context)
         {
             _logger.LogInformation("Responding to GetChunk call");
@@ -51,6 +57,7 @@ namespace DistributedFileSystem.WorkerNode.Services
             }
         }
 
+        // Will remove a chunk from worker node given a unique chunk id
         public override Task<DeleteChunkResponse> DeleteChunk(DeleteChunkRequest request, ServerCallContext context)
         {
             _logger.LogInformation("Responding to DeleteChunk call");
@@ -68,6 +75,7 @@ namespace DistributedFileSystem.WorkerNode.Services
             }
         }
 
+        // Will return the operating system resources like CPU, Memory, and Disk space
         public override Task<ResourceUsageResponse> ResourceUsage(ResourceUsageRequest request, ServerCallContext context)
         {
             _logger.LogInformation("Responding to ResourceUsage call");
@@ -96,20 +104,32 @@ namespace DistributedFileSystem.WorkerNode.Services
             });
         }
 
+        // HELPER FUNCTIONS FOR WINDOWS PLATFORMS
         private float GetCpuUsageWindows()
-        {   
-            using (var cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total"))
-            { return cpuCounter.NextValue(); }
+        {
+            var output = RunCommand("wmic cpu get loadpercentage");
+            var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length > 1 && float.TryParse(lines[1].Trim(), out var cpuUsage))
+            {
+                return cpuUsage;
+            }
+
+            return 0;
         }
 
         private long GetMemoryUsageWindows()
         {
-            using (var ramCounter = new PerformanceCounter("Memory", "Available MBytes"))
+            var output = RunCommand("wmic OS get FreePhysicalMemory");
+            var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length > 1 && long.TryParse(lines[1].Trim(), out var memoryUsage))
             {
-                return (long)ramCounter.NextValue() * 1024 * 1024;
+                return memoryUsage * 1024;
             }
+
+            return 0;
         }
 
+        // HELPER FUNCTIONS FOR UNIX LIKE PLATFORMS
         private float GetCpuUsageUnix()
         {
             var output = RunCommand("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'");
@@ -118,14 +138,17 @@ namespace DistributedFileSystem.WorkerNode.Services
 
         private long GetMemoryUsageUnix()
         {
-            var output = RunCommand("free | grep Mem | awk '{print $3}'");
+            var output = RunCommand("free | grep Mem | awk '{print $3 * 1024}'");
             return long.TryParse(output, out var memoryUsage) ? memoryUsage : 0;
         }
 
+        // Runs commands given the worker nodes unique operating system
         private string RunCommand(string command)
         {
-            var processInfo = new ProcessStartInfo("bash", $"-c \"{command}\"")
+            var processInfo = new ProcessStartInfo
             {
+                FileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "cmd" : "/bin/bash",
+                Arguments = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? $"/c {command}" : $"-c \"{command}\"",
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
@@ -134,7 +157,9 @@ namespace DistributedFileSystem.WorkerNode.Services
             using (var process = Process.Start(processInfo))
             {
                 using (var reader = process.StandardOutput)
-                { return reader.ReadToEnd().Trim(); }
+                {
+                    return reader.ReadToEnd().Trim();
+                }
             }
         }
     }

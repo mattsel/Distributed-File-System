@@ -1,11 +1,11 @@
-using Grpc.Net.Client;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using DistributedFileSystem.MasterNode;
-using DistributedFileSystem.WorkerNode;
-using System;
 using DistributedFileSystem.MasterNode.Services;
+
+// <summary>
+// The master node is important as it is the sole communicator for the worker nodes.
+// When a client makes a request, it is always to the master node, in which the master node,
+// can handle the response using it's various workers. Depending on the network's size, there may
+// be a need for multiple master nodes to help maintain extensive worker nodes.
+// </summary>
 
 class Program
 {
@@ -19,9 +19,6 @@ class Program
         var app = builder.Build();
 
         app.MapGrpcService<MasterNodeService>();
-
-        var url = "https://localhost:5001";
-        Console.WriteLine($"Master Node listening on {url}");
 
         await app.RunAsync();
     }

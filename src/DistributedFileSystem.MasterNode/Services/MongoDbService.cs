@@ -1,6 +1,11 @@
 ﻿using MongoDB.Driver;
 using DistributedFileSystem.MasterNode.Models;
-using Microsoft.Extensions.Logging;
+
+// <summary>
+// This acts as a helper funciton for the master node to use as a memory storage.
+// This namespace is vital to ensure redundancy in the system for the master ndoe to keep track of all metadata
+// and worker nodes available in the network.
+// </summary>
 
 namespace DistributedFileSystem.MasterNode.Services
 {
@@ -22,6 +27,7 @@ namespace DistributedFileSystem.MasterNode.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
+        // Called to initialize a document for new nodes
         public async Task<bool> CreateNode(string workerAddress)
         {
             _logger.LogInformation("Beginning to create new worker node.");
@@ -36,6 +42,7 @@ namespace DistributedFileSystem.MasterNode.Services
             catch (Exception ex) { _logger.LogError($"Failed to create new worker node: {ex}"); return false; }
         }
 
+        // Called to delete worker node's document from the database
         public async Task<bool> DeleteNode(string workerAddress)
         {
             _logger.LogInformation("Beginning to delete worker node.");
@@ -44,6 +51,7 @@ namespace DistributedFileSystem.MasterNode.Services
             catch (Exception ex) { _logger.LogError($"Failed to delete worker node: {ex}"); return false; }
         }
 
+        // This funciton allows the master node to update metadata given the address of the worker node
         public async Task<bool> UpdateWorkerMetadataAsync(string workerAddress, string status, float cpuUsage, float memoryUsage, float diskSpace)
         {
             _logger.LogInformation("Beginning to update worker's metadata");
@@ -58,6 +66,7 @@ namespace DistributedFileSystem.MasterNode.Services
             catch (Exception ex) { _logger.LogError($"Failed to update worker's metadata: {ex}"); return false; }
         }
 
+        // Allows the master node to update the worker status to either be working or waiting. This helps the master node to load balance
         public async Task<bool> UpdateWorkerStatus(string workerAddress, string status, string fileName, string chunkId)
         {
             _logger.LogInformation("Beginning to update worker's status");
@@ -84,6 +93,7 @@ namespace DistributedFileSystem.MasterNode.Services
             }
         }
 
+        // Given a filename, this query will return the addresses of all worker's that are storing the file's chunks
         public async Task<Dictionary<string, List<string>>> GetWorkersByFileNameAsync(string fileName)
         {
             _logger.LogInformation($"Beginning to get all worker address that are storing chunks of filename: {fileName}");
@@ -104,6 +114,7 @@ namespace DistributedFileSystem.MasterNode.Services
             return result;
         }
 
+        // Query to return all files in the network
         public async Task<List<string>> GetAllFiles()
         {
             _logger.LogInformation("Beginning to get all files");
@@ -113,6 +124,7 @@ namespace DistributedFileSystem.MasterNode.Services
             return workers.SelectMany(worker => worker.Files.Select(file => file.FileName)).ToList();
         }
 
+        // This uses worker's resources and status to help choose a worker that can handle the request with the least amount of latency possible
         public async Task<string?> GetOptimalWorker(int chunkSize)
         {
             _logger.LogInformation("Fetching most optimal worker with status 'waiting' and sufficient disk space.");

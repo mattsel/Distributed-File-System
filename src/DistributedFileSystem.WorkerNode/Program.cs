@@ -1,10 +1,10 @@
-using Grpc.Core;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Hosting;
-using DistributedFileSystem.WorkerNode;
-using System.Threading.Tasks;
 using DistributedFileSystem.WorkerNode.Services;
 
+// <summary>
+// This function will map the gRPC and build the web application.
+// The port that this funciton will run on depends on the specified port
+// in appsettings.json. For local testing, you must define it inside of appsettings.LocalDevelopment.json
+// </summary>
 class Program
 {
     public static async Task Main(string[] args)
@@ -14,9 +14,6 @@ class Program
         var app = builder.Build();
 
         app.MapGrpcService<WorkerNodeService>();
-
-        var url = "http://localhost:5002";
-        Console.WriteLine($"Worker Node listening on {url}");
 
         await app.RunAsync();
     }
