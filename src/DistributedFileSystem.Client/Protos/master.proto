@@ -7,6 +7,7 @@ service MasterNode {
     rpc RegisterFiles(MetadataAssignRequest) returns (MetadataAssignResponse);
     rpc ChunkLocations(ChunkLocationsRequest) returns (ChunkLocationsResponse);
     rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+    rpc GetWorkerStatus(GetWorkerStatusRequest) returns (GetWorkerStatusResponse);
 }
 
 message NodeAssignmentRequest {
@@ -40,4 +41,14 @@ message ListFilesRequest {}
 
 message ListFilesResponse {
     repeated string fileName = 1;
+}
+
+message GetWorkerStatusRequest {
+    string workerId = 1;
+}
+
+message GetWorkerStatusResponse {
+    bool isActive = 1;
+    string workerId = 2;
+    string lastUpdated = 3;
 }

@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using DistributedFileSystem.MasterNode;
 using DistributedFileSystem.WorkerNode;
 using System;
+using DistributedFileSystem.MasterNode.Services;
 
 class Program
 {
@@ -13,11 +14,7 @@ class Program
         var builder = WebApplication.CreateBuilder(args);
 
         builder.Services.AddGrpc();
-        builder.Services.AddSingleton<WorkerNode.WorkerNodeClient>(provider =>
-        {
-            var channel = GrpcChannel.ForAddress("http://localhost:5002");
-            return new WorkerNode.WorkerNodeClient(channel);
-        });
+        builder.Services.AddSingleton<MongoDbService>();
 
         var app = builder.Build();
 

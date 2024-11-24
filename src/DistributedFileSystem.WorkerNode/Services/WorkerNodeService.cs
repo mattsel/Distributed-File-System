@@ -2,65 +2,72 @@ using DistributedFileSystem.WorkerNode;
 using Grpc.Core;
 using Google.Protobuf;
 
-public class WorkerNodeService : WorkerNode.WorkerNodeBase
+namespace DistributedFileSystem.WorkerNode.Services
 {
-    private readonly string _chunkStorageDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Chunks");
-
-    public override Task<StoreChunkResponse> StoreChunk(StoreChunkRequest request, ServerCallContext context)
+    public class WorkerNodeService : WorkerNode.WorkerNodeBase
     {
-        var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
-        File.WriteAllBytes(chunkFilePath, request.ChunkData.ToByteArray());
+        private readonly string _chunkStorageDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Chunks");
 
-        return Task.FromResult(new StoreChunkResponse
+        public override Task<StoreChunkResponse> StoreChunk(StoreChunkRequest request, ServerCallContext context)
         {
-            Status = true,
-            Message = $"Chunk {request.ChunkId} stored successfully at {chunkFilePath}."
-        });
-    }
+            var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
+            File.WriteAllBytes(chunkFilePath, request.ChunkData.ToByteArray());
 
-    public override Task<GetChunkResponse> GetChunk(GetChunkRequest request, ServerCallContext context)
-    {
-        var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
-        if (File.Exists(chunkFilePath))
-        {
-            var chunkData = File.ReadAllBytes(chunkFilePath);
-
-            return Task.FromResult(new GetChunkResponse
+            return Task.FromResult(new StoreChunkResponse
             {
                 Status = true,
-                Message = $"Chunk {request.ChunkId} retrieved successfully.",
-                ChunkData = Google.Protobuf.ByteString.CopyFrom(chunkData)
+                Message = $"Chunk {request.ChunkId} stored successfully at {chunkFilePath}."
             });
         }
-        else
-        {
-            return Task.FromResult(new GetChunkResponse
-            {
-                Status = false,
-                Message = $"Chunk {request.ChunkId} not found."
-            });
-        }
-    }
-    public override Task<DeleteChunkResponse> DeleteChunk(DeleteChunkRequest request, ServerCallContext context)
-    {
-        var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
-        if (File.Exists(chunkFilePath))
-        {
-            File.Delete(chunkFilePath);
 
-            return Task.FromResult(new DeleteChunkResponse
-            {
-                Status = true,
-                Message = $"Chunk {request.ChunkId} deleted successfully.",
-            });
-        }
-        else
+        public override Task<GetChunkResponse> GetChunk(GetChunkRequest request, ServerCallContext context)
         {
-            return Task.FromResult(new DeleteChunkResponse
+            var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
+            if (File.Exists(chunkFilePath))
             {
-                Status = false,
-                Message = $"Chunk {request.ChunkId} deleted failed.",
-            });
+                var chunkData = File.ReadAllBytes(chunkFilePath);
+
+                return Task.FromResult(new GetChunkResponse
+                {
+                    Status = true,
+                    Message = $"Chunk {request.ChunkId} retrieved successfully.",
+                    ChunkData = Google.Protobuf.ByteString.CopyFrom(chunkData)
+                });
+            }
+            else
+            {
+                return Task.FromResult(new GetChunkResponse
+                {
+                    Status = false,
+                    Message = $"Chunk {request.ChunkId} not found."
+                });
+            }
+        }
+        public override Task<DeleteChunkResponse> DeleteChunk(DeleteChunkRequest request, ServerCallContext context)
+        {
+            var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
+            if (File.Exists(chunkFilePath))
+            {
+                File.Delete(chunkFilePath);
+
+                return Task.FromResult(new DeleteChunkResponse
+                {
+                    Status = true,
+                    Message = $"Chunk {request.ChunkId} deleted successfully.",
+                });
+            }
+            else
+            {
+                return Task.FromResult(new DeleteChunkResponse
+                {
+                    Status = false,
+                    Message = $"Chunk {request.ChunkId} deleted failed.",
+                });
+            }
+        }
+        public override Task<ResourceUsageResponse> ResourceUsage(ResourceUsageRequest request, ServerCallContext context)
+        {
+            // RETURN RESOURCES FOR MASTER NODE
         }
     }
 }

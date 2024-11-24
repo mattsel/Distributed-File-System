@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
 using DistributedFileSystem.WorkerNode;
 using System.Threading.Tasks;
+using DistributedFileSystem.WorkerNode.Services;
 
 class Program
 {

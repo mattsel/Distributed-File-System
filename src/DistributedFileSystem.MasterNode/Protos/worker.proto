@@ -6,6 +6,7 @@ service WorkerNode {
     rpc StoreChunk(StoreChunkRequest) returns (StoreChunkResponse);
     rpc GetChunk(GetChunkRequest) returns (GetChunkResponse);
     rpc DeleteChunk(DeleteChunkRequest) returns (DeleteChunkResponse);
+    rpc ResourceUsage(ResourceUsageRequest) returns (ResourceUsageResponse);
 }
 
 message StoreChunkRequest {
@@ -35,4 +36,16 @@ message DeleteChunkRequest {
 message DeleteChunkResponse {
     bool status = 1;
     string message = 2;
+}
+
+message ResourceUsageRequest {
+
+}
+
+message ResourceUsageResponse {
+    bool status = 1;
+    bool isActive = 2;
+    int cpuUsage = 2;
+    int memoryUsage = 3;
+    int diskUsage = 4;
 }
