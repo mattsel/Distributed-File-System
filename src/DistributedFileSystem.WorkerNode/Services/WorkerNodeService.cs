@@ -79,7 +79,7 @@ namespace DistributedFileSystem.WorkerNode.Services
                 return Task.FromResult(new ResourceUsageResponse
                 {
                     Status = true,
-                    Message = "Successfully retrieved worker resource information."
+                    Message = "Successfully retrieved worker resource information.",
                     CpuUsage = cpuUsage,
                     MemoryUsage = memoryUsage,
                     DiskSpace = diskSpace
@@ -90,7 +90,7 @@ namespace DistributedFileSystem.WorkerNode.Services
                 return Task.FromResult(new ResourceUsageResponse
                 {
                     Status = false,
-                    Message = "Failed to retrieved worker resource information."
+                    Message = "Failed to retrieved worker resource information.",
                     CpuUsage = "0",
                     MemoryUsage = "0",
                     DiskSpace = "0"
