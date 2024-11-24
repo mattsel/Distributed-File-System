@@ -8,7 +8,7 @@ service MasterNode {
     rpc HandleFiles(HandleFilesRequest) returns (HandleFilesResponse);
     rpc ChunkLocations(ChunkLocationsRequest) returns (ChunkLocationsResponse);
     rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
-    rpc GetWorkerStatus(GetWorkerStatusRequest) returns (GetWorkerStatusResponse);
+    rpc GetWorkerResources(GetWorkerStatusRequest) returns (GetWorkerStatusResponse);
 }
 
 message CreateNodeRequest {
@@ -57,8 +57,10 @@ message GetWorkerResources {
     string workerAddress = 1;
 }
 
-message GetWorkerStatusResponse {
-    bool isActive = 1;
-    string workerAddress = 2;
-    string lastUpdated = 3;
+message GetWorkerResourcesResponse {
+    bool status = 1;
+    string message = 2;
+    int cpuUsage = 3;
+    int memoryUsage = 4;
+    int diskSpace = 5;
 }

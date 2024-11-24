@@ -38,14 +38,12 @@ message DeleteChunkResponse {
     string message = 2;
 }
 
-message ResourceUsageRequest {
-
-}
+message ResourceUsageRequest {}
 
 message ResourceUsageResponse {
     bool status = 1;
-    bool isActive = 2;
-    int cpuUsage = 2;
-    int memoryUsage = 3;
-    int diskUsage = 4;
+    string message = 2;
+    int cpuUsage = 3;
+    int memoryUsage = 4;
+    int diskUsage = 5;
 }

@@ -14,17 +14,13 @@ namespace DistributedFileSystem.MasterNode.Services
         public MongoDbService(IConfiguration configuration, ILogger<MongoDbService> logger)
         {
             var mongoSettings = configuration.GetSection("MongoDbSettings");
-
             var connectionString = mongoSettings.GetValue<string>("ConnectionString");
             var databaseName = mongoSettings.GetValue<string>("Database");
             var collectionName = mongoSettings.GetValue<string>("Collection");
-
             var mongoClient = new MongoClient(connectionString);
-
             _database = mongoClient.GetDatabase(databaseName);
             _workerCollection = _database.GetCollection<WorkerMetadata>(collectionName);
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger)); ;
-
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task<bool> CreateNode(string workerAddress)
@@ -32,10 +28,12 @@ namespace DistributedFileSystem.MasterNode.Services
             var workerMetadata = new WorkerMetadata
             {
                 WorkerAddress = workerAddress,
-                LastUpdated = DateTime.UtcNow
+                Status = "waiting",
+                LastUpdated = DateTime.UtcNow,
+                Chunks = new Dictionary<string, Dictionary<string, string>>()
             };
             try { await _workerCollection.InsertOneAsync(workerMetadata); return true; }
-            catch {  return false; }
+            catch { return false; }
         }
 
         public async Task<bool> DeleteNode(string workerAddress)
@@ -64,61 +62,72 @@ namespace DistributedFileSystem.MasterNode.Services
                 .Set(w => w.Status, status)
                 .Set(w => w.LastUpdated, DateTime.UtcNow);
             var filter = Builders<WorkerMetadata>.Filter.Eq(w => w.WorkerAddress, workerAddress);
-            try { await _workerCollection.UpdateOneAsync(filter, update); return true;}
+            try { await _workerCollection.UpdateOneAsync(filter, update); return true; }
             catch { return false; }
         }
 
         public async Task<List<string?>> GetChunkLocations(string chunkId)
         {
-            var filter = Builders<WorkerMetadata>.Filter.AnyEq(w => w.Chunks, chunkId);
+            var filter = Builders<WorkerMetadata>.Filter.Where(w => w.Chunks.Values
+                .Any(chunkDict => chunkDict.ContainsKey(chunkId)));
             var projection = Builders<WorkerMetadata>.Projection.Expression(w => w.WorkerAddress);
             var workersWithChunkId = await _workerCollection.Find(filter).Project(projection).ToListAsync();
-
             return workersWithChunkId;
-
         }
-        public async Task<WorkerMetadata> GetWorkerMetadataAsync(string WorkerAddress)
+
+        public async Task<WorkerMetadata> GetWorkerMetadataAsync(string workerAddress)
         {
-            var filter = Builders<WorkerMetadata>.Filter.Eq(w => w.WorkerAddress, WorkerAddress);
+            var filter = Builders<WorkerMetadata>.Filter.Eq(w => w.WorkerAddress, workerAddress);
             return await _workerCollection.Find(filter).FirstOrDefaultAsync();
         }
 
         public async Task<List<string?>> GetAllWorkerAddressesAsync()
         {
             var projection = Builders<WorkerMetadata>.Projection.Expression(w => w.WorkerAddress);
-            var workerAddresses = await _workerCollection
+            return await _workerCollection
                 .Find(_ => true)
                 .Project(projection)
                 .ToListAsync();
-            return workerAddresses;
+        }
+
+        public async Task<List<string?>> GetAllFiles()
+        {
+            var workersWithChunks = await _workerCollection
+                .Find(_ => true)
+                .ToListAsync();
+
+            List<string?> files = new List<string?>();
+
+            foreach (var worker in workersWithChunks)
+            {
+                foreach (var chunk in worker.Chunks.Keys)
+                {
+                    files.Add(chunk);
+                }
+            }
+
+            return files;
         }
 
         public async Task<string?> GetOptimalWorker(int chunkSize)
         {
-            _logger.LogInformation("Fetching most optimal worker with status 'waiting' and sufficient disk space...");
+            _logger.LogInformation("Fetching most optimal worker with status 'waiting' and sufficient disk space.");
             var workers = await _workerCollection
                 .Find(w => w.Status == "waiting")
                 .ToListAsync();
 
-            if (workers == null || workers.Count == 0)
+            if (!workers.Any())
             {
                 _logger.LogWarning("No workers with status 'waiting' found in the database.");
                 return null;
             }
 
-            _logger.LogInformation($"Found {workers.Count} workers with status 'waiting'.");
-
-            var validWorkers = workers
-                .Where(w => w.DiskSpace >= chunkSize)
-                .ToList();
-
-            if (validWorkers == null || validWorkers.Count == 0)
+            var validWorkers = workers.Where(w => w.DiskSpace >= chunkSize).ToList();
+            if (!validWorkers.Any())
             {
-                _logger.LogWarning($"No workers have enough disk space for the chunk size of {chunkSize}.");
+                _logger.LogWarning($"No workers with sufficient disk space for chunk size {chunkSize}.");
                 return null;
             }
-
-            _logger.LogInformation($"Found {validWorkers.Count} workers with sufficient disk space for the chunk size of {chunkSize}.");
 
             var optimalWorker = validWorkers
                 .OrderBy(w => Math.Min(Math.Min(w.CpuUsage, w.MemoryUsage), w.DiskSpace))
@@ -126,12 +135,11 @@ namespace DistributedFileSystem.MasterNode.Services
 
             if (optimalWorker == null)
             {
-                _logger.LogWarning("No worker found with the least resource usage after filtering.");
+                _logger.LogWarning("No optimal worker found.");
                 return null;
             }
 
-            _logger.LogInformation($"Most optimal worker found: Address: {optimalWorker.WorkerAddress}, CPU: {optimalWorker.CpuUsage}%, Memory: {optimalWorker.MemoryUsage}%, Disk Space: {optimalWorker.DiskSpace}MB");
-
+            _logger.LogInformation($"Optimal worker found: {optimalWorker.WorkerAddress} (CPU: {optimalWorker.CpuUsage}%, Memory: {optimalWorker.MemoryUsage}%, Disk: {optimalWorker.DiskSpace}MB)");
             return optimalWorker.WorkerAddress;
         }
     }

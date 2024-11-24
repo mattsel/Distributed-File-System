@@ -7,6 +7,9 @@ namespace DistributedFileSystem.WorkerNode.Services
     public class WorkerNodeService : WorkerNode.WorkerNodeBase
     {
         private readonly string _chunkStorageDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Chunks");
+        private readonly PerformanceCounter _cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+        private readonly PerformanceCounter _ramCounter = new PerformanceCounter("Memory", "Available MBytes");
+        private readonly DriveInfo _driveInfo = new DriveInfo("C");
 
         public override Task<StoreChunkResponse> StoreChunk(StoreChunkRequest request, ServerCallContext context)
         {
@@ -67,7 +70,32 @@ namespace DistributedFileSystem.WorkerNode.Services
         }
         public override Task<ResourceUsageResponse> ResourceUsage(ResourceUsageRequest request, ServerCallContext context)
         {
-            // RETURN RESOURCES FOR MASTER NODE
+            var cpuUsage = _cpuCounter.NextValue();
+            var memoryUsage = _ramCounter.NextValue() * 1024 * 1024;
+            var diskSpace = _driveInfo.AvailableFreeSpace;
+
+            if (cpuUsage != null && memoryUsage != null && diskSpace != null)
+            {
+                return Task.FromResult(new ResourceUsageResponse
+                {
+                    Status = true,
+                    Message = "Successfully retrieved worker resource information."
+                    CpuUsage = cpuUsage,
+                    MemoryUsage = memoryUsage,
+                    DiskSpace = diskSpace
+                });
+            }
+            else
+            {
+                return Task.FromResult(new ResourceUsageResponse
+                {
+                    Status = false,
+                    Message = "Failed to retrieved worker resource information."
+                    CpuUsage = "0",
+                    MemoryUsage = "0",
+                    DiskSpace = "0"
+                });
+            }
         }
     }
 }
