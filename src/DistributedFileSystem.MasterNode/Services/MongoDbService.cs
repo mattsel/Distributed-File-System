@@ -29,7 +29,10 @@ namespace DistributedFileSystem.MasterNode.Services
                 WorkerAddress = workerAddress,
                 Status = "waiting",
                 LastUpdated = DateTime.UtcNow,
-                Chunks = new Dictionary<string, Dictionary<string, string>>()
+                DiskSpace = 0,
+                CpuUsage = 0,
+                MemoryUsage = 0,
+                Files = new List<FileMetadata>()
             };
             try { await _workerCollection.InsertOneAsync(workerMetadata); return true; }
             catch { return false; }
@@ -55,22 +58,33 @@ namespace DistributedFileSystem.MasterNode.Services
             catch { return false; }
         }
 
-        public async Task<bool> UpdateWorkerStatus(string workerAddress, string status)
+        public async Task<bool> UpdateWorkerStatus(string workerAddress, string status, string fileName, string chunkId)
         {
-            var update = Builders<WorkerMetadata>.Update
-                .Set(w => w.Status, status)
-                .Set(w => w.LastUpdated, DateTime.UtcNow);
             var filter = Builders<WorkerMetadata>.Filter.Eq(w => w.WorkerAddress, workerAddress);
+            var update = Builders<WorkerMetadata>.Update .Set(w => w.Status, status)
+                .Set(w => w.LastUpdated, DateTime.UtcNow)
+                .AddToSet(w => w.Files, new FileMetadata { FileName = fileName, Chunks = new Dictionary<string> { { chunkId } } });
             try { await _workerCollection.UpdateOneAsync(filter, update); return true; }
             catch { return false; }
         }
 
-        public async Task<List<string?>> GetChunkLocations(string chunkId)
+        public async Task<Dictionary<string, List<string>>> GetWorkersByFileNameAsync(string fileName)
         {
-            var filter = Builders<WorkerMetadata>.Filter.Where(w => w.Chunks.Values.Any(chunk => chunk.ContainsKey(chunkId)));
-            var projection = Builders<WorkerMetadata>.Projection.Expression(w => w.WorkerAddress);
-            var workersWithChunkId = await _workerCollection.Find(filter).Project(projection).ToListAsync();
-            return workersWithChunkId;
+            var filter = Builders<WorkerMetadata>.Filter.ElemMatch(w => w.Files, f => f.FileName == fileName);
+            var projection = Builders<WorkerMetadata>.Projection.Include(w => w.WorkerAddress).Include(w => w.Files);
+            
+            var workers = await _workerCollection.Find(filter).Project<WorkerMetadata>(projection).ToListAsync();
+            
+            var result = new Dictionary<string, List<string>>();
+            foreach (var worker in workers)
+            {
+                var matchingFile = worker.Files.FirstOrDefault(f => f.FileName == fileName);
+                if (matchingFile != null)
+                {
+                    result[worker.WorkerAddress] = matchingFile.Chunks.Keys.ToList();
+                }
+            }
+            return result;
         }
 
         public async Task<WorkerMetadata> GetWorkerMetadataAsync(string workerAddress)

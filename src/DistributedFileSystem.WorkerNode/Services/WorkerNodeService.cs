@@ -16,11 +16,7 @@ namespace DistributedFileSystem.WorkerNode.Services
             var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
             File.WriteAllBytes(chunkFilePath, request.ChunkData.ToByteArray());
 
-            return Task.FromResult(new StoreChunkResponse
-            {
-                Status = true,
-                Message = $"Chunk {request.ChunkId} stored successfully at {chunkFilePath}."
-            });
+            return Task.FromResult(new StoreChunkResponse { Status = true, Message = $"Chunk {request.ChunkId} stored successfully at {chunkFilePath}." });
         }
 
         public override Task<GetChunkResponse> GetChunk(GetChunkRequest request, ServerCallContext context)
@@ -39,11 +35,7 @@ namespace DistributedFileSystem.WorkerNode.Services
             }
             else
             {
-                return Task.FromResult(new GetChunkResponse
-                {
-                    Status = false,
-                    Message = $"Chunk {request.ChunkId} not found."
-                });
+                return Task.FromResult(new GetChunkResponse { Status = false, Message = $"Chunk {request.ChunkId} not found." });
             }
         }
         public override Task<DeleteChunkResponse> DeleteChunk(DeleteChunkRequest request, ServerCallContext context)
@@ -53,19 +45,11 @@ namespace DistributedFileSystem.WorkerNode.Services
             {
                 File.Delete(chunkFilePath);
 
-                return Task.FromResult(new DeleteChunkResponse
-                {
-                    Status = true,
-                    Message = $"Chunk {request.ChunkId} deleted successfully.",
-                });
+                return Task.FromResult(new DeleteChunkResponse { Status = true, Message = $"Chunk {request.ChunkId} deleted successfully." });
             }
             else
             {
-                return Task.FromResult(new DeleteChunkResponse
-                {
-                    Status = false,
-                    Message = $"Chunk {request.ChunkId} deleted failed.",
-                });
+                return Task.FromResult(new DeleteChunkResponse { Status = false, Message = $"Chunk {request.ChunkId} deleted failed." });
             }
         }
         public override Task<ResourceUsageResponse> ResourceUsage(ResourceUsageRequest request, ServerCallContext context)

@@ -35,6 +35,7 @@ message ChunkLocationsRequest {
 
 message ChunkLocationsResponse {
     repeated string nodeAddress = 1;
+    repeated string chunkId = 2;
 }
 
 message ListFilesRequest {}
