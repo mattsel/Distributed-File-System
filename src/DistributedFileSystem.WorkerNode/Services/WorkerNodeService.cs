@@ -91,9 +91,7 @@ namespace DistributedFileSystem.WorkerNode.Services
         private float GetCpuUsageWindows()
         {
             using (var cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total"))
-            {
-                return cpuCounter.NextValue();
-            }
+            { return cpuCounter.NextValue(); }
         }
 
         private long GetMemoryUsageWindows()
@@ -128,9 +126,7 @@ namespace DistributedFileSystem.WorkerNode.Services
             using (var process = Process.Start(processInfo))
             {
                 using (var reader = process.StandardOutput)
-                {
-                    return reader.ReadToEnd().Trim();
-                }
+                { return reader.ReadToEnd().Trim(); }
             }
         }
     }

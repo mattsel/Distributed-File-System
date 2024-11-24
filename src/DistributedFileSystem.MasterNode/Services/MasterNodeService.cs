@@ -20,19 +20,11 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         bool response = await _mongoDbService.CreateNode(request.WorkerAddress);
         if (response)
         {
-            return new CreateNodeResponse
-            {
-                Status = true,
-                Message = "Node created successfully."
-            };
+            return new CreateNodeResponse { Status = true, Message = "Node created successfully." };
         }
         else
         {
-            return new CreateNodeResponse
-            {
-                Status = false,
-                Message = "Node failed to be created."
-            };
+            return new CreateNodeResponse { Status = false, Message = "Node failed to be created." };
         }
     }
 
@@ -41,19 +33,11 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         bool response = await _mongoDbService.DeleteNode(request.WorkerAddress);
         if (response)
         {
-            return new DeleteNodeResponse
-            {
-                Status = true,
-                Message = "Node deleted successfully."
-            };
+            return new DeleteNodeResponse { Status = true, Message = "Node deleted successfully." };
         }
         else
         {
-            return new DeleteNodeResponse
-            {
-                Status = false,
-                Message = "Node failed to be deleted."
-            };
+            return new DeleteNodeResponse { Status = false, Message = "Node failed to be deleted." };
         }
     }
 
@@ -67,11 +51,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             var chunkId = Guid.NewGuid().ToString();
             await _mongoDbService.UpdateWorkerStatus(worker, "working", request.FileName, chunkId);
 
-            var workerRequest = new StoreChunkRequest
-            {
-                ChunkId = chunkId,
-                ChunkData = request.ChunkData
-            };
+            var workerRequest = new StoreChunkRequest { ChunkId = chunkId, ChunkData = request.ChunkData };
 
             var workerResponse = await client.StoreChunkAsync(workerRequest);
             if (workerResponse.Status)
@@ -85,39 +65,23 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
                 if (updateMongo)
                 {
-                    return new HandleFilesResponse
-                    {
-                        Status = true,
-                        Message = workerResponse.Message
-                    };
+                    return new HandleFilesResponse { Status = true, Message = workerResponse.Message };
                 }
                 else
                 {
-                    return new HandleFilesResponse
-                    {
-                        Status = false,
-                        Message = "Failed to update MongoDB."
-                    };
+                    return new HandleFilesResponse { Status = false, Message = "Failed to update MongoDB." };
                 }
             }
             else
             {
                 _logger.LogError("Failed to store chunk at worker node.");
-                return new HandleFilesResponse
-                {
-                    Status = false,
-                    Message = "Failed to store chunk at worker node."
-                };
+                return new HandleFilesResponse { Status = false, Message = "Failed to store chunk at worker node." };
             }
         }
         else
         {
             _logger.LogError("No optimal worker found.");
-            return new HandleFilesResponse
-            {
-                Status = false,
-                Message = "Failed to find optimal worker to store your files."
-            };
+            return new HandleFilesResponse { Status = false, Message = "Failed to find optimal worker to store your files." };
         }
     }
 
