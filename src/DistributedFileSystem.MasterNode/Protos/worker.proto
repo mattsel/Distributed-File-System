@@ -45,5 +45,5 @@ message ResourceUsageResponse {
     string message = 2;
     float cpuUsage = 3;
     float memoryUsage = 4;
-    float diskUsage = 5;
+    float diskSpace = 5;
 }

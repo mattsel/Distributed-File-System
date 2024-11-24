@@ -3,12 +3,12 @@ package DistributedFileSystem.MasterNode;
 option csharp_namespace = "DistributedFileSystem.MasterNode";
 
 service MasterNode {
-    rpc CreateNode(CreateNodeRequest) returns (CreateNodeResponse);
-    rpc DeleteNode(DeleteNodeRequest) returns (DeleteNodeResponse);
-    rpc HandleFiles(HandleFilesRequest) returns (HandleFilesResponse);
-    rpc ChunkLocations(ChunkLocationsRequest) returns (ChunkLocationsResponse);
-    rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
-    rpc GetWorkerResources(GetWorkerStatusRequest) returns (GetWorkerStatusResponse);
+    rpc CreateNode (CreateNodeRequest) returns (CreateNodeResponse);
+    rpc DeleteNode (DeleteNodeRequest) returns (DeleteNodeResponse);
+    rpc HandleFiles (HandleFilesRequest) returns (HandleFilesResponse);
+    rpc ChunkLocations (ChunkLocationsRequest) returns (ChunkLocationsResponse);
+    rpc ListFiles (ListFilesRequest) returns (ListFilesResponse);
+    rpc GetWorkerResources (GetWorkerResourcesRequest) returns (GetWorkerResourcesResponse);
 }
 
 message CreateNodeRequest {
@@ -32,6 +32,7 @@ message DeleteNodeResponse {
 message HandleFilesRequest {
     string fileName = 1;
     bytes chunkData = 2;
+    int32 chunkSize = 3;
 }
 
 message HandleFilesResponse {
@@ -40,7 +41,7 @@ message HandleFilesResponse {
 }
 
 message ChunkLocationsRequest {
-    string chunkId = 1;
+    string fileName = 1;
 }
 
 message ChunkLocationsResponse {
@@ -54,11 +55,11 @@ message ListFilesResponse {
     repeated string fileName = 1;
 }
 
-message GetWorkerStatusRequest {
+message GetWorkerResourcesRequest {
     string workerAddress = 1;
 }
 
-message GetWorkerStatusResponse {
+message GetWorkerResourcesResponse {
     bool status = 1;
     string message = 2;
     float cpuUsage = 3;

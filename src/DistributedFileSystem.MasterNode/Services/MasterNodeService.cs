@@ -1,7 +1,8 @@
-using Grpc.Net.Client;
-using Grpc.Core;
 using DistributedFileSystem.MasterNode;
+using Grpc.Core;
+using Grpc.Net.Client;
 using DistributedFileSystem.MasterNode.Services;
+using DistributedFileSystem.WorkerNode;
 
 public class MasterNodeService : MasterNode.MasterNodeBase
 {
@@ -16,72 +17,107 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
     public override async Task<CreateNodeResponse> CreateNode(CreateNodeRequest request, ServerCallContext context)
     {
-        bool response = await _mongoDbService.CreateNode(request.workerAddress);
+        bool response = await _mongoDbService.CreateNode(request.WorkerAddress);
         if (response)
         {
-            return new CreateNodeResponse { Status = true, Message = "Node created successfully." };
+            return new CreateNodeResponse
+            {
+                Status = true,
+                Message = "Node created successfully."
+            };
         }
         else
         {
-            return new CreateNodeResponse { Status = false, Message = "Node failed to be created." };
+            return new CreateNodeResponse
+            {
+                Status = false,
+                Message = "Node failed to be created."
+            };
         }
     }
 
     public override async Task<DeleteNodeResponse> DeleteNode(DeleteNodeRequest request, ServerCallContext context)
     {
-        bool response = await _mongoDbService.DeleteNode(request.workerAddress);
+        bool response = await _mongoDbService.DeleteNode(request.WorkerAddress);
         if (response)
         {
-            return new DeleteNodeResponse { Status = true, Message = "Node deleted successfully." };
+            return new DeleteNodeResponse
+            {
+                Status = true,
+                Message = "Node deleted successfully."
+            };
         }
         else
         {
-            return new DeleteNodeResponse { Status = false, Message = "Node failed to be deleted." };
+            return new DeleteNodeResponse
+            {
+                Status = false,
+                Message = "Node failed to be deleted."
+            };
         }
     }
 
     public override async Task<HandleFilesResponse> HandleFiles(HandleFilesRequest request, ServerCallContext context)
     {
-        var worker = _mongoDbService.GetOptimalWorker(request.ChunkSize).ToString();
-        if (!string.IsNullOrEmpty(worker))
+        var worker = await _mongoDbService.GetOptimalWorker(request.ChunkSize);
+        if (worker != null)
         {
             var channel = GrpcChannel.ForAddress(worker);
             var client = new WorkerNode.WorkerNodeClient(channel);
             var chunkId = Guid.NewGuid().ToString();
             await _mongoDbService.UpdateWorkerStatus(worker, "working", request.FileName, chunkId);
 
-            var workerRequest = new StoreChunkRequest { ChunkId = chunkId, ChunkData = request.ChunkData };
+            var workerRequest = new StoreChunkRequest
+            {
+                ChunkId = chunkId,
+                ChunkData = request.ChunkData
+            };
 
-            var workerResponse = await client.StoreChunk(workerRequest);
+            var workerResponse = await client.StoreChunkAsync(workerRequest);
             if (workerResponse.Status)
             {
                 _logger.LogInformation("Chunk stored successfully at worker node.");
 
-                var resourceRequest = new GetWorkerResourcesRequest { WorkerAddress = worker };
-
-                var resourceResponse = await GetWorkerResources(resourceRequest, context);
+                var resourceRequest = new ResourceUsageRequest();
+                var resourceResponse = await client.ResourceUsageAsync(resourceRequest);
 
                 var updateMongo = await _mongoDbService.UpdateWorkerMetadataAsync(worker, "working", resourceResponse.CpuUsage, resourceResponse.MemoryUsage, resourceResponse.DiskSpace);
 
                 if (updateMongo)
                 {
-                    return new HandleFilesResponse { Status = true, Message = workerResponse.Message };
+                    return new HandleFilesResponse
+                    {
+                        Status = true,
+                        Message = workerResponse.Message
+                    };
                 }
                 else
                 {
-                    return new HandleFilesResponse { Status = false, Message = "Failed to update MongoDB." };
+                    return new HandleFilesResponse
+                    {
+                        Status = false,
+                        Message = "Failed to update MongoDB."
+                    };
                 }
             }
             else
             {
                 _logger.LogError("Failed to store chunk at worker node.");
-                return new HandleFilesResponse { Status = false, Message = "Failed to store chunk at worker node." };
+                return new HandleFilesResponse
+                {
+                    Status = false,
+                    Message = "Failed to store chunk at worker node."
+                };
             }
         }
         else
         {
             _logger.LogError("No optimal worker found.");
-            return new HandleFilesResponse { Status = false, Message = "Failed to find optimal worker to store your files." };
+            return new HandleFilesResponse
+            {
+                Status = false,
+                Message = "Failed to find optimal worker to store your files."
+            };
         }
     }
 
@@ -92,7 +128,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
         foreach (var worker in workerChunks)
         {
-            response.WorkerAddress.AddRange(worker.Key);
+            response.WorkerAddress.Add(worker.Key);
             response.ChunkId.AddRange(worker.Value);
         }
         return response;
@@ -106,14 +142,14 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         return response;
     }
 
-    public override async Task<GetWorkerStatusResponse> GetWorkerResources(GetWorkerResourcesRequest request, ServerCallContext context)
+    public override async Task<GetWorkerResourcesResponse> GetWorkerResources(GetWorkerResourcesRequest request, ServerCallContext context)
     {
         var channel = GrpcChannel.ForAddress(request.WorkerAddress);
         var client = new WorkerNode.WorkerNodeClient(channel);
-        var workerRequest = new ResourceUsageRequest {};
-        var workerResponse = await client.ResourceUsage(workerRequest);
+        var workerRequest = new ResourceUsageRequest();
+        var workerResponse = await client.ResourceUsageAsync(workerRequest);
 
-        return new GetWorkerStatusResponse
+        return new GetWorkerResourcesResponse
         {
             Status = workerResponse.Status,
             Message = workerResponse.Message,

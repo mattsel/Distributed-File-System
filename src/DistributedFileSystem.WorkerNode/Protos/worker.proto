@@ -43,7 +43,7 @@ message ResourceUsageRequest {}
 message ResourceUsageResponse {
     bool status = 1;
     string message = 2;
-    int cpuUsage = 3;
-    int memoryUsage = 4;
-    int diskUsage = 5;
+    float cpuUsage = 3;
+    float memoryUsage = 4;
+    float diskSpace = 5;
 }
