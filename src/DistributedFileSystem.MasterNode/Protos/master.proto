@@ -24,7 +24,7 @@ message DeleteNodeRequest {
     string workerAddress = 1;
 }
 
-message DeleteNodeRequest {
+message DeleteNodeResponse {
     bool status = 1;
     string message = 2;
 }
@@ -53,14 +53,14 @@ message ListFilesResponse {
     repeated string fileName = 1;
 }
 
-message GetWorkerResources {
+message GetWorkerStatusRequest {
     string workerAddress = 1;
 }
 
-message GetWorkerResourcesResponse {
+message GetWorkerStatusResponse {
     bool status = 1;
     string message = 2;
-    int cpuUsage = 3;
-    int memoryUsage = 4;
-    int diskSpace = 5;
+    float cpuUsage = 3;
+    float memoryUsage = 4;
+    float diskSpace = 5;
 }

@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
-using MongoDB.Driver;
+﻿using MongoDB.Driver;
 using DistributedFileSystem.MasterNode.Models;
 using Microsoft.Extensions.Logging;
 
@@ -68,8 +67,7 @@ namespace DistributedFileSystem.MasterNode.Services
 
         public async Task<List<string?>> GetChunkLocations(string chunkId)
         {
-            var filter = Builders<WorkerMetadata>.Filter.Where(w => w.Chunks.Values
-                .Any(chunkDict => chunkDict.ContainsKey(chunkId)));
+            var filter = Builders<WorkerMetadata>.Filter.Where(w => w.Chunks.Values.Any(chunk => chunk.ContainsKey(chunkId)));
             var projection = Builders<WorkerMetadata>.Projection.Expression(w => w.WorkerAddress);
             var workersWithChunkId = await _workerCollection.Find(filter).Project(projection).ToListAsync();
             return workersWithChunkId;
@@ -92,21 +90,12 @@ namespace DistributedFileSystem.MasterNode.Services
 
         public async Task<List<string?>> GetAllFiles()
         {
+            var projection = Builders<WorkerMetadata>.Projection.Expression(w => w.Chunks);
             var workersWithChunks = await _workerCollection
                 .Find(_ => true)
+                .Project(projection)
                 .ToListAsync();
-
-            List<string?> files = new List<string?>();
-
-            foreach (var worker in workersWithChunks)
-            {
-                foreach (var chunk in worker.Chunks.Keys)
-                {
-                    files.Add(chunk);
-                }
-            }
-
-            return files;
+            return workersWithChunks.SelectMany(worker => worker.Chunks.Keys).ToList();
         }
 
         public async Task<string?> GetOptimalWorker(int chunkSize)
@@ -116,31 +105,20 @@ namespace DistributedFileSystem.MasterNode.Services
                 .Find(w => w.Status == "waiting")
                 .ToListAsync();
 
-            if (!workers.Any())
-            {
-                _logger.LogWarning("No workers with status 'waiting' found in the database.");
-                return null;
-            }
+            if (!workers.Any()) { _logger.LogWarning("No workers with status 'waiting' found."); return null; }
 
             var validWorkers = workers.Where(w => w.DiskSpace >= chunkSize).ToList();
-            if (!validWorkers.Any())
-            {
-                _logger.LogWarning($"No workers with sufficient disk space for chunk size {chunkSize}.");
-                return null;
-            }
+            if (!validWorkers.Any()) { _logger.LogWarning($"No workers with sufficient disk space for chunk size {chunkSize}."); return null; }
 
             var optimalWorker = validWorkers
                 .OrderBy(w => Math.Min(Math.Min(w.CpuUsage, w.MemoryUsage), w.DiskSpace))
                 .FirstOrDefault();
 
-            if (optimalWorker == null)
-            {
-                _logger.LogWarning("No optimal worker found.");
-                return null;
-            }
+            if (optimalWorker == null) { _logger.LogWarning("No optimal worker found."); return null; }
 
             _logger.LogInformation($"Optimal worker found: {optimalWorker.WorkerAddress} (CPU: {optimalWorker.CpuUsage}%, Memory: {optimalWorker.MemoryUsage}%, Disk: {optimalWorker.DiskSpace}MB)");
             return optimalWorker.WorkerAddress;
         }
     }
 }
+
