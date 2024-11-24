@@ -17,32 +17,39 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
     public override async Task<CreateNodeResponse> CreateNode(CreateNodeRequest request, ServerCallContext context)
     {
+        _logger.LogInformation("Responding to CreateNode call.");
         bool response = await _mongoDbService.CreateNode(request.WorkerAddress);
         if (response)
         {
+            _logger.LogInformation("Successfully create node.");
             return new CreateNodeResponse { Status = true, Message = "Node created successfully." };
         }
         else
         {
+            _logger.LogError("Failed to create node.");
             return new CreateNodeResponse { Status = false, Message = "Node failed to be created." };
         }
     }
 
     public override async Task<DeleteNodeResponse> DeleteNode(DeleteNodeRequest request, ServerCallContext context)
     {
+        _logger.LogInformation("Responding to DeleteNode call");
         bool response = await _mongoDbService.DeleteNode(request.WorkerAddress);
         if (response)
         {
+            _logger.LogInformation("Successfully deleted node");
             return new DeleteNodeResponse { Status = true, Message = "Node deleted successfully." };
         }
         else
         {
+            _logger.LogError("Failed to delete node");
             return new DeleteNodeResponse { Status = false, Message = "Node failed to be deleted." };
         }
     }
 
     public override async Task<HandleFilesResponse> HandleFiles(HandleFilesRequest request, ServerCallContext context)
     {
+        _logger.LogInformation("Responding to HandleFiles call");
         var worker = await _mongoDbService.GetOptimalWorker(request.ChunkSize);
         if (worker != null)
         {
@@ -65,10 +72,12 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
                 if (updateMongo)
                 {
+                    _logger.LogInformation("Successfully stored file chunks");
                     return new HandleFilesResponse { Status = true, Message = workerResponse.Message };
                 }
                 else
                 {
+                    _logger.LogError("Failed to update MongoDB with worker's new metadata");
                     return new HandleFilesResponse { Status = false, Message = "Failed to update MongoDB." };
                 }
             }
@@ -87,6 +96,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
     public override async Task<ChunkLocationsResponse> ChunkLocations(ChunkLocationsRequest request, ServerCallContext context)
     {
+        _logger.LogInformation("Responding to ChunkLocations call");
         var workerChunks = await _mongoDbService.GetWorkersByFileNameAsync(request.FileName);
         var response = new ChunkLocationsResponse();
 
@@ -100,6 +110,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
     public override async Task<ListFilesResponse> ListFiles(ListFilesRequest request, ServerCallContext context)
     {
+        _logger.LogInformation("Responding to ListFiles call");
         var files = await _mongoDbService.GetAllFiles();
         var response = new ListFilesResponse();
         response.FileName.AddRange(files);
@@ -108,6 +119,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
     public override async Task<GetWorkerResourcesResponse> GetWorkerResources(GetWorkerResourcesRequest request, ServerCallContext context)
     {
+        _logger.LogInformation("Responding to GetWorkerResources call");
         var channel = GrpcChannel.ForAddress(request.WorkerAddress);
         var client = new WorkerNode.WorkerNodeClient(channel);
         var workerRequest = new ResourceUsageRequest();

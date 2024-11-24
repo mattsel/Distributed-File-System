@@ -11,14 +11,17 @@ namespace DistributedFileSystem.WorkerNode.Services
     {
         private readonly string _chunkStorageDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Chunks");
         private readonly DriveInfo _driveInfo;
+        private readonly ILogger<WorkerNodeService> _logger;
 
-        public WorkerNodeService()
+        public WorkerNodeService(ILogger<WorkerNodeService> logger)
         {
             _driveInfo = new DriveInfo(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "C" : "/");
+            _logger = logger;
         }
 
         public override Task<StoreChunkResponse> StoreChunk(StoreChunkRequest request, ServerCallContext context)
         {
+            _logger.LogInformation("Responding to StoreChunk call");
             var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
             Directory.CreateDirectory(_chunkStorageDirectory);
             File.WriteAllBytes(chunkFilePath, request.ChunkData.ToByteArray());
@@ -28,6 +31,7 @@ namespace DistributedFileSystem.WorkerNode.Services
 
         public override Task<GetChunkResponse> GetChunk(GetChunkRequest request, ServerCallContext context)
         {
+            _logger.LogInformation("Responding to GetChunk call");
             var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
             if (File.Exists(chunkFilePath))
             {
@@ -42,27 +46,31 @@ namespace DistributedFileSystem.WorkerNode.Services
             }
             else
             {
+                _logger.LogError("Failed to find ChunkId");
                 return Task.FromResult(new GetChunkResponse { Status = false, Message = $"Chunk {request.ChunkId} not found." });
             }
         }
 
         public override Task<DeleteChunkResponse> DeleteChunk(DeleteChunkRequest request, ServerCallContext context)
         {
+            _logger.LogInformation("Responding to DeleteChunk call");
             var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
             if (File.Exists(chunkFilePath))
             {
                 File.Delete(chunkFilePath);
-
+                _logger.LogInformation("Successfully deleted chunk");
                 return Task.FromResult(new DeleteChunkResponse { Status = true, Message = $"Chunk {request.ChunkId} deleted successfully." });
             }
             else
             {
+                _logger.LogError("Failed to delete chunk");
                 return Task.FromResult(new DeleteChunkResponse { Status = false, Message = $"Chunk {request.ChunkId} deletion failed." });
             }
         }
 
         public override Task<ResourceUsageResponse> ResourceUsage(ResourceUsageRequest request, ServerCallContext context)
         {
+            _logger.LogInformation("Responding to ResourceUsage call");
             float cpuUsage;
             long memoryUsage;
             long diskSpace = _driveInfo.AvailableFreeSpace;
@@ -89,7 +97,7 @@ namespace DistributedFileSystem.WorkerNode.Services
         }
 
         private float GetCpuUsageWindows()
-        {
+        {   
             using (var cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total"))
             { return cpuCounter.NextValue(); }
         }

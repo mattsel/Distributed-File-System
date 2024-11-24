@@ -24,6 +24,7 @@ namespace DistributedFileSystem.MasterNode.Services
 
         public async Task<bool> CreateNode(string workerAddress)
         {
+            _logger.LogInformation("Beginning to create new worker node.");
             var workerMetadata = new WorkerMetadata
             {
                 WorkerAddress = workerAddress,
@@ -31,19 +32,21 @@ namespace DistributedFileSystem.MasterNode.Services
                 LastUpdated = DateTime.UtcNow,
                 Files = new List<FileMetadata>()
             };
-            try { await _workerCollection.InsertOneAsync(workerMetadata); return true; }
-            catch { return false; }
+            try { await _workerCollection.InsertOneAsync(workerMetadata); _logger.LogInformation("Worker node created successfully."); return true;}
+            catch (Exception ex) { _logger.LogError($"Failed to create new worker node: {ex}"); return false; }
         }
 
         public async Task<bool> DeleteNode(string workerAddress)
         {
+            _logger.LogInformation("Beginning to delete worker node.");
             var filter = Builders<WorkerMetadata>.Filter.Eq(w => w.WorkerAddress, workerAddress);
-            try { await _workerCollection.DeleteOneAsync(filter); return true; }
-            catch { return false; }
+            try { await _workerCollection.DeleteOneAsync(filter); _logger.LogInformation("Worker node deleted successfully."); return true; }
+            catch (Exception ex) { _logger.LogError($"Failed to delete worker node: {ex}"); return false; }
         }
 
         public async Task<bool> UpdateWorkerMetadataAsync(string workerAddress, string status, float cpuUsage, float memoryUsage, float diskSpace)
         {
+            _logger.LogInformation("Beginning to update worker's metadata");
             var update = Builders<WorkerMetadata>.Update
                 .Set(w => w.DiskSpace, diskSpace)
                 .Set(w => w.Status, status)
@@ -51,14 +54,14 @@ namespace DistributedFileSystem.MasterNode.Services
                 .Set(w => w.MemoryUsage, memoryUsage)
                 .Set(w => w.LastUpdated, DateTime.UtcNow);
             var filter = Builders<WorkerMetadata>.Filter.Eq(w => w.WorkerAddress, workerAddress);
-            try { await _workerCollection.UpdateOneAsync(filter, update); return true; }
-            catch { return false; }
+            try { await _workerCollection.UpdateOneAsync(filter, update); _logger.LogInformation("Successfully updated worker nodes metadata"); return true; }
+            catch (Exception ex) { _logger.LogError($"Failed to update worker's metadata: {ex}"); return false; }
         }
 
         public async Task<bool> UpdateWorkerStatus(string workerAddress, string status, string fileName, string chunkId)
         {
+            _logger.LogInformation("Beginning to update worker's status");
             var filter = Builders<WorkerMetadata>.Filter.Eq(w => w.WorkerAddress, workerAddress);
-
             var update = Builders<WorkerMetadata>.Update.Combine(
                 Builders<WorkerMetadata>.Update.Set(w => w.Status, status),
                 Builders<WorkerMetadata>.Update.Set(w => w.LastUpdated, DateTime.UtcNow),
@@ -68,23 +71,24 @@ namespace DistributedFileSystem.MasterNode.Services
                     Chunks = new Dictionary<string, string> { { chunkId, workerAddress } }
                 })
             );
-
             try
             {
                 var result = await _workerCollection.UpdateOneAsync(filter, update);
+                _logger.LogInformation("Successfully updated worker's status");
                 return result.ModifiedCount > 0;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogError($"Unable to update worker's status: {ex}");
                 return false;
             }
         }
 
         public async Task<Dictionary<string, List<string>>> GetWorkersByFileNameAsync(string fileName)
         {
+            _logger.LogInformation($"Beginning to get all worker address that are storing chunks of filename: {fileName}");
             var filter = Builders<WorkerMetadata>.Filter.ElemMatch(w => w.Files, f => f.FileName == fileName);
             var projection = Builders<WorkerMetadata>.Projection.Include(w => w.WorkerAddress).Include(w => w.Files);
-
             var workers = await _workerCollection.Find(filter).Project<WorkerMetadata>(projection).ToListAsync();
 
             var result = new Dictionary<string, List<string>>();
@@ -96,22 +100,24 @@ namespace DistributedFileSystem.MasterNode.Services
                     result[worker.WorkerAddress] = matchingFile.Chunks.Keys.ToList();
                 }
             }
+            _logger.LogInformation("Finished finding all workers by filename");
             return result;
         }
 
         public async Task<List<string>> GetAllFiles()
         {
+            _logger.LogInformation("Beginning to get all files");
             var projection = Builders<WorkerMetadata>.Projection.Include(w => w.Files);
             var workers = await _workerCollection.Find(_ => true).Project<WorkerMetadata>(projection).ToListAsync();
-
+            _logger.LogInformation("Finished getting all files");
             return workers.SelectMany(worker => worker.Files.Select(file => file.FileName)).ToList();
         }
 
         public async Task<string?> GetOptimalWorker(int chunkSize)
         {
             _logger.LogInformation("Fetching most optimal worker with status 'waiting' and sufficient disk space.");
-            var workers = await _workerCollection.Find(w => w.Status == "waiting").ToListAsync();
 
+            var workers = await _workerCollection.Find(w => w.Status == "waiting").ToListAsync();
             if (!workers.Any())
             {
                 _logger.LogWarning("No workers with status 'waiting' found.");
@@ -128,7 +134,6 @@ namespace DistributedFileSystem.MasterNode.Services
             var optimalWorker = validWorkers
                 .OrderBy(w => Math.Min(Math.Min(w.CpuUsage, w.MemoryUsage), w.DiskSpace))
                 .FirstOrDefault();
-
             if (optimalWorker == null)
             {
                 _logger.LogWarning("No optimal worker found.");
