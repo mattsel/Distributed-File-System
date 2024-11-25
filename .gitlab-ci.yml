@@ -1,0 +1,60 @@
+stages:
+  - build
+
+build_client:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  rules:
+    - changes:
+      - DistributedFileSystem.Client/**/*
+  before_script:
+    - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+  script:
+    - echo "Building Docker image"
+    - docker --version
+    - docker build -t distributed-file-system-client:$CI_COMMIT_SHA .
+    - docker push mattsel/distributed-file-system-client:$CI_COMMIT_SHA
+  only:
+    - main
+    - merge_requests
+
+
+build_master:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  rules:
+    - changes:
+      - DistributedFileSystem.Master/**/*
+  before_script:
+    - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+  script:
+    - echo "Building Docker image"
+    - docker --version
+    - docker build -t distributed-file-system-master:$CI_COMMIT_SHA .
+    - docker push mattsel/distributed-file-system-master:$CI_COMMIT_SHA
+  only:
+    - main
+    - merge_requests
+
+build_worker:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  rules:
+    - changes:
+      - DistributedFileSystem.Worker/**/*
+  before_script:
+    - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+  script:
+    - echo "Building Docker image"
+    - docker --version
+    - docker build -t distributed-file-system-worker:$CI_COMMIT_SHA .
+    - docker push mattsel/distributed-file-system-worker:$CI_COMMIT_SHA
+  only:
+    - main
+    - merge_requests

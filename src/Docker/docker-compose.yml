@@ -1,0 +1,36 @@
+version: '3.8'
+services:
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: client
+    ports:
+      - "80:80"
+    networks:
+      - distributed_net
+  
+  master:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    container_name: master
+    ports:
+      - "81:81"
+    networks:
+      - distributed_net
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: worker
+    ports:
+      - "82:82"
+    networks:
+      - distributed_net
+
+
+networks:
+  distributed_net:
+    driver: bridge
