@@ -9,6 +9,10 @@ service MasterNode {
     rpc ChunkLocations (ChunkLocationsRequest) returns (ChunkLocationsResponse);
     rpc ListFiles (ListFilesRequest) returns (ListFilesResponse);
     rpc GetWorkerResources (GetWorkerResourcesRequest) returns (GetWorkerResourcesResponse);
+    rpc DistributeFile (DistributeFileRequest) returns (DistributeFileResponse);
+    rpc RetrieveFile (RetrieveFileRequest) returns (RetrieveFileResponse);
+    rpc ReplicateFileChunks (ReplicateFileChunksRequest) returns (ReplicateFileChunksResponse);
+    rpc DeleteFile (DeleteFileRequest) returns (DeleteFileResponse);
 }
 
 message CreateNodeRequest {
@@ -69,4 +73,42 @@ message GetWorkerResourcesResponse {
     float cpuUsage = 3;
     float memoryUsage = 4;
     float diskSpace = 5;
+}
+
+message DistributeFileRequest {
+    string fileName = 1;
+    bytes fileData = 2;
+}
+
+message DistributeFileResponse {
+    bool status = 1;
+    string message = 2;
+}
+
+message RetrieveFileRequest {
+    string fileName = 1;
+}
+
+message RetrieveFileResponse {
+    bool status = 1;
+    string message = 2;
+    bytes fileData = 3;
+}
+
+message ReplicateFileChunksRequest {
+    string fileName = 1;
+}
+
+message ReplicateFileChunksResponse {
+    bool status = 1;
+    string message = 2;
+}
+
+message DeleteFileRequest {
+    string fileName = 1;
+}
+
+message DeleteFileResponse {
+    bool status = 1;
+    string message = 2;
 }
