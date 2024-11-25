@@ -1,8 +1,9 @@
 using Google.Protobuf;
 using Grpc.Core;
 using System.Diagnostics;
-using System.IO;
 using System.Runtime.InteropServices;
+using DistributedFileSystem.WorkerNode.Models;
+using Prometheus;
 
 // <sumary>
 // All of the functions in this file serve as a translator for gRPC calls. When these functions are called with their required parameters,
@@ -16,33 +17,49 @@ namespace DistributedFileSystem.WorkerNode.Services
         private readonly string _chunkStorageDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Chunks");
         private readonly DriveInfo _driveInfo;
         private readonly ILogger<WorkerNodeService> _logger;
+        private readonly MetricsCollector _metrics;
 
-        public WorkerNodeService(ILogger<WorkerNodeService> logger)
+        public WorkerNodeService(ILogger<WorkerNodeService> logger, MetricsCollector metrics)
         {
-            _driveInfo = new DriveInfo("/");
+            string rootDirectory = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "C:\\" : "/";
+            _driveInfo = new DriveInfo(rootDirectory);
             _logger = logger;
+            _metrics = metrics;
         }
 
         // Stores chunks on the worker node given a unique chunk id 
         public override Task<StoreChunkResponse> StoreChunk(StoreChunkRequest request, ServerCallContext context)
         {
-            _logger.LogInformation("Responding to StoreChunk call");
-            var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
-            Directory.CreateDirectory(_chunkStorageDirectory);
-            File.WriteAllBytes(chunkFilePath, request.ChunkData.ToByteArray());
-
-            return Task.FromResult(new StoreChunkResponse { Status = true, Message = $"Chunk {request.ChunkId} stored successfully at {chunkFilePath}." });
+            var timer = Stopwatch.StartNew();
+            try
+            {
+                _logger.LogInformation("Responding to StoreChunk call");
+                _metrics.GrpcCallsCounter.WithLabels("StoreChunk").Inc();
+                var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
+                Directory.CreateDirectory(_chunkStorageDirectory);
+                File.WriteAllBytes(chunkFilePath, request.ChunkData.ToByteArray());
+                _metrics.RequestDuration.WithLabels("StoreChunk").Observe(timer.Elapsed.TotalSeconds);
+                return Task.FromResult(new StoreChunkResponse { Status = true, Message = $"Chunk {request.ChunkId} stored successfully at {chunkFilePath}." });
+            }
+            catch (Exception ex)
+            {
+                _metrics.ErrorCount.WithLabels("StoreChunk").Inc();
+                _metrics.RequestDuration.WithLabels("StoreChunk").Observe(timer.Elapsed.TotalSeconds);
+                return Task.FromResult(new StoreChunkResponse { Status = false, Message = $"Chunk {request.ChunkId} failed to be stored: {ex}." });
+            }
         }
 
         // Returns the chunk given the unique chunk id for a given file
         public override Task<GetChunkResponse> GetChunk(GetChunkRequest request, ServerCallContext context)
         {
             _logger.LogInformation("Responding to GetChunk call");
+            _metrics.GrpcCallsCounter.WithLabels("GetChunk").Inc();
+            var timer = Stopwatch.StartNew();
             var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
             if (File.Exists(chunkFilePath))
             {
                 var chunkData = File.ReadAllBytes(chunkFilePath);
-
+                _metrics.RequestDuration.WithLabels("GetChunk").Observe(timer.Elapsed.TotalSeconds);
                 return Task.FromResult(new GetChunkResponse
                 {
                     Status = true,
@@ -53,6 +70,8 @@ namespace DistributedFileSystem.WorkerNode.Services
             else
             {
                 _logger.LogError("Failed to find ChunkId");
+                _metrics.ErrorCount.WithLabels("GetChunk").Inc();
+                _metrics.RequestDuration.WithLabels("GetChunk").Observe(timer.Elapsed.TotalSeconds);
                 return Task.FromResult(new GetChunkResponse { Status = false, Message = $"Chunk {request.ChunkId} not found." });
             }
         }
@@ -61,16 +80,21 @@ namespace DistributedFileSystem.WorkerNode.Services
         public override Task<DeleteChunkResponse> DeleteChunk(DeleteChunkRequest request, ServerCallContext context)
         {
             _logger.LogInformation("Responding to DeleteChunk call");
+            _metrics.GrpcCallsCounter.WithLabels("DeleteChunk").Inc();
+            var timer = Stopwatch.StartNew();
             var chunkFilePath = Path.Combine(_chunkStorageDirectory, request.ChunkId);
             if (File.Exists(chunkFilePath))
             {
                 File.Delete(chunkFilePath);
                 _logger.LogInformation("Successfully deleted chunk");
+                _metrics.RequestDuration.WithLabels("DeleteChunk").Observe(timer.Elapsed.TotalSeconds);
                 return Task.FromResult(new DeleteChunkResponse { Status = true, Message = $"Chunk {request.ChunkId} deleted successfully." });
             }
             else
             {
                 _logger.LogError("Failed to delete chunk");
+                _metrics.ErrorCount.WithLabels("DeleteChunk").Inc();
+                _metrics.RequestDuration.WithLabels("DeleteChunk").Observe(timer.Elapsed.TotalSeconds);
                 return Task.FromResult(new DeleteChunkResponse { Status = false, Message = $"Chunk {request.ChunkId} deletion failed." });
             }
         }
@@ -78,30 +102,54 @@ namespace DistributedFileSystem.WorkerNode.Services
         // Will return the operating system resources like CPU, Memory, and Disk space
         public override Task<ResourceUsageResponse> ResourceUsage(ResourceUsageRequest request, ServerCallContext context)
         {
-            _logger.LogInformation("Responding to ResourceUsage call");
-            float cpuUsage;
-            long memoryUsage;
-            long diskSpace = _driveInfo.AvailableFreeSpace;
+            var timer = Stopwatch.StartNew();
+            try
+            {
+                _logger.LogInformation("Responding to ResourceUsage call");
+                _metrics.GrpcCallsCounter.WithLabels("ResourceUsage").Inc();
+                float cpuUsage;
+                long memoryUsage;
+                long diskSpace = _driveInfo.AvailableFreeSpace;
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                cpuUsage = GetCpuUsageWindows();
-                memoryUsage = GetMemoryUsageWindows();
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    cpuUsage = GetCpuUsageWindows();
+                    memoryUsage = GetMemoryUsageWindows();
+                }
+                else
+                {
+                    cpuUsage = GetCpuUsageUnix();
+                    memoryUsage = GetMemoryUsageUnix();
+                }
+                _metrics.RequestDuration.WithLabels("ResourceUsage").Observe(timer.Elapsed.TotalSeconds);
+                _metrics.CpuUsage.WithLabels(request.WorkerAddress).IncTo(cpuUsage);
+                _metrics.MemoryUsage.WithLabels(request.WorkerAddress).IncTo(memoryUsage);
+                _metrics.AvailableDiskSpace.WithLabels(request.WorkerAddress).IncTo(diskSpace);
+                return Task.FromResult(new ResourceUsageResponse
+                {
+                    Status = true,
+                    Message = "Successfully retrieved worker resource information.",
+                    CpuUsage = cpuUsage,
+                    MemoryUsage = memoryUsage,
+                    DiskSpace = diskSpace
+                });
             }
-            else
+            catch (Exception ex)
             {
-                cpuUsage = GetCpuUsageUnix();
-                memoryUsage = GetMemoryUsageUnix();
+                _metrics.ErrorCount.WithLabels("ResourceUsage").Inc();
+                _metrics.RequestDuration.WithLabels("ResourceUsage").Observe(timer.Elapsed.TotalSeconds);
+                _metrics.CpuUsage.WithLabels(request.WorkerAddress).IncTo(0);
+                _metrics.MemoryUsage.WithLabels(request.WorkerAddress).IncTo(0);
+                _metrics.AvailableDiskSpace.WithLabels(request.WorkerAddress).IncTo(0);
+                return Task.FromResult(new ResourceUsageResponse
+                {
+                    Status = false,
+                    Message = $"Failed to retrieve resources: {ex}.",
+                    CpuUsage = 0,
+                    MemoryUsage = 0,
+                    DiskSpace = 0
+                });
             }
-
-            return Task.FromResult(new ResourceUsageResponse
-            {
-                Status = true,
-                Message = "Successfully retrieved worker resource information.",
-                CpuUsage = cpuUsage,
-                MemoryUsage = memoryUsage,
-                DiskSpace = diskSpace
-            });
         }
 
         // HELPER FUNCTIONS FOR WINDOWS PLATFORMS
