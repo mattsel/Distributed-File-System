@@ -1,4 +1,6 @@
+using DistributedFileSystem.MasterNode.Models;
 using DistributedFileSystem.MasterNode.Services;
+using Prometheus;
 
 // <summary>
 // The master node is important as it is the sole communicator for the worker nodes.
@@ -15,10 +17,15 @@ class Program
 
         builder.Services.AddGrpc();
         builder.Services.AddSingleton<MongoDbService>();
+        builder.Services.AddSingleton<MetricsCollector>();
+        builder.Services.AddLogging();
 
         var app = builder.Build();
 
         app.MapGrpcService<MasterNodeService>();
+
+        app.UseRouting();
+        app.MapMetrics();
 
         await app.RunAsync();
     }

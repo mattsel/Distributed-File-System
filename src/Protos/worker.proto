@@ -38,7 +38,9 @@ message DeleteChunkResponse {
     string message = 2;
 }
 
-message ResourceUsageRequest {}
+message ResourceUsageRequest {
+    string workerAddress = 1;
+}
 
 message ResourceUsageResponse {
     bool status = 1;

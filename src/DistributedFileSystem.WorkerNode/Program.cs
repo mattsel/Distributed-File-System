@@ -1,4 +1,6 @@
+using DistributedFileSystem.WorkerNode.Models;
 using DistributedFileSystem.WorkerNode.Services;
+using Prometheus;
 
 // <summary>
 // This function will map the gRPC and build the web application.
@@ -11,10 +13,12 @@ class Program
     {
         var builder = WebApplication.CreateBuilder(args);
         builder.Services.AddGrpc();
+        builder.Services.AddSingleton<MetricsCollector>();
+
         var app = builder.Build();
-
         app.MapGrpcService<WorkerNodeService>();
-
+        app.UseRouting();
+        app.MapMetrics();
         await app.RunAsync();
     }
 }

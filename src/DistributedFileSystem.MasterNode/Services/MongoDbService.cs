@@ -1,5 +1,6 @@
 ﻿using MongoDB.Driver;
 using DistributedFileSystem.MasterNode.Models;
+using Prometheus;
 
 // <summary>
 // This acts as a helper funciton for the master node to use as a memory storage.
@@ -14,8 +15,9 @@ namespace DistributedFileSystem.MasterNode.Services
         private readonly IMongoDatabase _database;
         private readonly IMongoCollection<WorkerMetadata> _workerCollection;
         private readonly ILogger<MongoDbService> _logger;
+        private readonly MetricsCollector _metrics;
 
-        public MongoDbService(IConfiguration configuration, ILogger<MongoDbService> logger)
+        public MongoDbService(IConfiguration configuration, ILogger<MongoDbService> logger, MetricsCollector metrics)
         {
             var mongoSettings = configuration.GetSection("MongoDbSettings");
             var connectionString = mongoSettings.GetValue<string>("ConnectionString");
@@ -25,20 +27,29 @@ namespace DistributedFileSystem.MasterNode.Services
             _database = mongoClient.GetDatabase(databaseName);
             _workerCollection = _database.GetCollection<WorkerMetadata>(collectionName);
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         }
 
         // Called to initialize a document for new nodes
         public async Task<bool> CreateNode(string workerAddress)
         {
-            _logger.LogInformation("Beginning to create new worker node.");
-            var workerMetadata = new WorkerMetadata
+            try
             {
-                WorkerAddress = workerAddress,
-                Status = "waiting",
-                LastUpdated = DateTime.UtcNow,
-                Files = new List<FileMetadata>()
-            };
-            try { await _workerCollection.InsertOneAsync(workerMetadata); _logger.LogInformation("Worker node created successfully."); return true;}
+                _logger.LogInformation("Checking if worker node already exists.");
+                var existingNode = await _workerCollection.Find(w => w.WorkerAddress == workerAddress).FirstOrDefaultAsync();
+                if (existingNode != null) { _logger.LogInformation("Worker node already exists. Skipping creation."); return false; }
+
+                var workerMetadata = new WorkerMetadata
+                {
+                    WorkerAddress = workerAddress,
+                    Status = "waiting",
+                    LastUpdated = DateTime.UtcNow,
+                    Files = new List<FileMetadata>()
+                };
+                await _workerCollection.InsertOneAsync(workerMetadata);
+                _logger.LogInformation("Worker node created successfully.");
+                return true;
+            }
             catch (Exception ex) { _logger.LogError($"Failed to create new worker node: {ex}"); return false; }
         }
 
@@ -52,7 +63,7 @@ namespace DistributedFileSystem.MasterNode.Services
         }
 
         // This funciton allows the master node to update metadata given the address of the worker node
-        public async Task<bool> UpdateWorkerMetadataAsync(string workerAddress, string status, float cpuUsage, float memoryUsage, float diskSpace)
+        public async Task<bool> UpdateWorkerMetadata(string workerAddress, string status, float cpuUsage, float memoryUsage, float diskSpace)
         {
             _logger.LogInformation("Beginning to update worker's metadata");
             var update = Builders<WorkerMetadata>.Update
@@ -94,7 +105,7 @@ namespace DistributedFileSystem.MasterNode.Services
         }
 
         // Given a filename, this query will return the addresses of all worker's that are storing the file's chunks
-        public async Task<Dictionary<string, List<string>>> GetWorkersByFileNameAsync(string fileName)
+        public async Task<Dictionary<string, List<string>>> GetWorkersByFileName(string fileName)
         {
             _logger.LogInformation($"Beginning to get all worker address that are storing chunks of filename: {fileName}");
             var filter = Builders<WorkerMetadata>.Filter.ElemMatch(w => w.Files, f => f.FileName == fileName);
