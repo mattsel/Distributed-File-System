@@ -29,6 +29,8 @@ function Add-ScrapeConfig {
     scrape_interval: 15s
     static_configs:
       - targets: ['$address']
+    tls_config:
+      insecure_skip_verify: true"
 "@
 
     $configContent = Get-Content $configFilePath -Raw
@@ -37,6 +39,8 @@ function Add-ScrapeConfig {
     } else {
         Add-Content -Path $configFilePath -Value $scrapeConfig
         Write-Host "Scrape config for address '$address' has been added to the configuration file."
+        Invoke-RestMethod -Method Post -Uri $address/-/reload
+
     }
 }
 
@@ -51,6 +55,8 @@ function Remove-ScrapeConfig {
     scrape_interval: 15s
     static_configs:
       - targets: ['$address']
+    tls_config:
+      insecure_skip_verify: true"
 "@
 
     if ($configContent -match [regex]::Escape($scrapeConfig)) {
