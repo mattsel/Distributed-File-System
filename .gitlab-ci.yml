@@ -14,12 +14,11 @@ build_client:
   script:
     - echo "Building Docker image"
     - docker --version
-    - docker build -t distributed-file-system-client:$CI_COMMIT_SHA .
+    - docker build -f src/Docker/Dockerfile.client -t distributed-file-system-worker:$CI_COMMIT_SHA .
     - docker push mattsel/distributed-file-system-client:$CI_COMMIT_SHA
   only:
     - main
     - merge_requests
-
 
 build_master:
   stage: build
@@ -34,7 +33,7 @@ build_master:
   script:
     - echo "Building Docker image"
     - docker --version
-    - docker build -t distributed-file-system-master:$CI_COMMIT_SHA .
+    - docker build -f src/Docker/Dockerfile.manager -t distributed-file-system-worker:$CI_COMMIT_SHA .
     - docker push mattsel/distributed-file-system-master:$CI_COMMIT_SHA
   only:
     - main
@@ -53,7 +52,7 @@ build_worker:
   script:
     - echo "Building Docker image"
     - docker --version
-    - docker build -t distributed-file-system-worker:$CI_COMMIT_SHA .
+    - docker build -f src/Docker/Dockerfile.worker -t distributed-file-system-worker:$CI_COMMIT_SHA .
     - docker push mattsel/distributed-file-system-worker:$CI_COMMIT_SHA
   only:
     - main
