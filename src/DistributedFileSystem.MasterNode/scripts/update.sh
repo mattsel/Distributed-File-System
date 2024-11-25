@@ -27,8 +27,11 @@ add_scrape_config() {
     local address="$1"
     local scrapeConfig="  - job_name: 'scrape_$address'
     scrape_interval: 15s
+    scheme: https
     static_configs:
-      - targets: ['$address']"
+      - targets: ['$address']
+    tls_config:
+      insecure_skip_verify: true"
 
     if grep -q "scrape_$address" "$configFilePath"; then
         echo "Scrape config for address '$address' already exists in the configuration file."
@@ -36,14 +39,19 @@ add_scrape_config() {
         echo "$scrapeConfig" >> "$configFilePath"
         echo "Scrape config for address '$address' has been added to the configuration file."
     fi
+    curl -X POST $address/-/reload
+
 }
 
 remove_scrape_config() {
     local address="$1"
     local scrapeConfig="  - job_name: 'scrape_$address'
     scrape_interval: 15s
+    scheme: https
     static_configs:
-      - targets: ['$address']"
+      - targets: ['$address']
+    tls_config:
+      insecure_skip_verify: true"
 
     if grep -qF "$scrapeConfig" "$configFilePath"; then
         sed -i.bak "/$scrapeConfig/d" "$configFilePath"

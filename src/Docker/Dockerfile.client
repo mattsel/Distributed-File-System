@@ -15,4 +15,4 @@ WORKDIR /app
 COPY --from=build /app/publish /app
 
 ENTRYPOINT ["dotnet", "DistributedFileSystem.Client.dll"]
-EXPOSE 80
+EXPOSE 5000

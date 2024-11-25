@@ -14,4 +14,4 @@ WORKDIR /app
 COPY --from=build /app/publish /app
 
 ENTRYPOINT ["dotnet", "DistributedFileSystem.MasterNode.dll"]
-EXPOSE 81
+EXPOSE 5001

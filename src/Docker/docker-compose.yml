@@ -6,7 +6,7 @@ services:
       dockerfile: Dockerfile.client
     container_name: client
     ports:
-      - "80:80"
+      - "5000:5000"
     networks:
       - distributed_net
   
@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile.manager
     container_name: master
     ports:
-      - "81:81"
+      - "5001:5001"
     networks:
       - distributed_net
 
@@ -26,7 +26,7 @@ services:
       dockerfile: Dockerfile.worker
     container_name: worker
     ports:
-      - "82:82"
+      - "5002:5002"
     networks:
       - distributed_net
 
