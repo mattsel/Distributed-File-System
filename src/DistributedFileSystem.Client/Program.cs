@@ -37,14 +37,14 @@ class Program
 
         app.MapGet("/DeleteNode", async (MasterNode.MasterNodeClient client) =>
         {
-            var response = await client.DeleteNodeAsync(new DeleteNodeRequest { WorkerAddress = "https://localhost:5002" });
+            var response = await client.DeleteNodeAsync(new DeleteNodeRequest { WorkerAddress = "6000" });
             return Results.Ok(response.Message);
         });
 
-        app.MapGet("/HandleFiles", async (MasterNode.MasterNodeClient client) =>
+        app.MapGet("/SingleStore", async (MasterNode.MasterNodeClient client) =>
         {
             var chunkData = new byte[] { 0x01, 0x02, 0x03 };
-            var response = await client.HandleFilesAsync(new HandleFilesRequest
+            var response = client.SingleStore(new SingleStoreRequest
             {
                 FileName = "example.txt",
                 ChunkData = Google.Protobuf.ByteString.CopyFrom(chunkData),

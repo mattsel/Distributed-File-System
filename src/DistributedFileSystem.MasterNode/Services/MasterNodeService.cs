@@ -6,6 +6,9 @@ using DistributedFileSystem.WorkerNode;
 using System.Diagnostics;
 using DistributedFileSystem.MasterNode.Models;
 using System.Runtime.InteropServices;
+using System.Net.Sockets;
+using System.Net;
+using System.Security.Cryptography;
 
 // <summary>
 // This class acts as the translator for gRPC calls to the master node. Many interactions with the master node will require the master node to interact with
@@ -31,7 +34,10 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         _logger.LogInformation("Responding to CreateNode call.");
         _metrics.GrpcCallsCounter.WithLabels("CreateNode").Inc();
         var timer = Stopwatch.StartNew();
-
+        string port = request.WorkerAddress.ToString().Split(":")[2];
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { RunProcess("powershell", port, "..\\..\\..\\scripts\\createWorker.ps1"); }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { RunProcess("bash", port, "..\\..\\..\\scripts\\createWorker.sh"); }
+        else { _logger.LogError("Unable to add scrape target"); }
         var channel = GrpcChannel.ForAddress(request.WorkerAddress);
         var client = new WorkerNode.WorkerNodeClient(channel);
         var resourceRequest = new ResourceUsageRequest();
@@ -63,8 +69,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
             if (updateResourceResult)
             {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { AddScrape("powershell", request.WorkerAddress.ToString(), "CreateNode"); }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { AddScrape("bash", request.WorkerAddress.ToString(), "CreateNode"); }
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { RunProcess("powershell", $"https://localhost:{port}", "CreateNode", "..\\..\\..\\scripts\\scrape.ps1"); }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { RunProcess("bash", $"https://localhost:{port}", "CreateNode", "..\\..\\..\\scripts\\scrape.sh"); }
                 else { _logger.LogError("Unable to add scrape target"); }
                 _logger.LogInformation("Successfully updated worker metadata with resource usage.");
                 _metrics.RequestDuration.WithLabels("CreateNode").Observe(timer.Elapsed.TotalSeconds);
@@ -93,12 +99,17 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         _logger.LogInformation("Responding to DeleteNode call");
         _metrics.GrpcCallsCounter.WithLabels("DeleteNode").Inc();
         var timer = Stopwatch.StartNew();
+        int workerPid = await _mongoDbService.GetWorkerPid(request.WorkerAddress);
+        Process process = Process.GetProcessById(workerPid);
+        process.Kill();
+        Console.WriteLine($"Process with PID {workerPid} has been terminated.");
+
         bool response = await _mongoDbService.DeleteNode(request.WorkerAddress);
         if (response)
         {
             _logger.LogInformation("Successfully deleted node");
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { AddScrape("powershell", request.WorkerAddress.ToString(), "DeleteNode"); }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { AddScrape("bash", request.WorkerAddress.ToString(), "DeleteNode"); }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { RunProcess("powershell", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.ps1"); }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { RunProcess("bash", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.sh"); }
             else { _logger.LogError("Unable to remove scrape target"); }
             _metrics.RequestDuration.WithLabels("DeleteNode").Observe(timer.Elapsed.TotalSeconds);
             return new DeleteNodeResponse { Status = true, Message = "Node deleted successfully." };
@@ -225,27 +236,24 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             DiskSpace = workerResponse.DiskSpace
         };
     }
-    private void AddScrape(string language, string address, string action)
+    private async void RunProcess(string language, string address, string path, string action="")
     {
         try
         {
-            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            string scriptPath;
-            string absoluteScriptPath;
             string args;
-            if (language == "powershell")
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            string absoluteScriptPath = Path.GetFullPath(Path.Combine(baseDirectory, path));
+
+            if (action == "CreateNode" || action == "DeleteNode")
             {
-                scriptPath = "..\\..\\..\\scripts\\update.ps1";
-                absoluteScriptPath = Path.GetFullPath(Path.Combine(baseDirectory, scriptPath));
-                args = $"{absoluteScriptPath} -address {address} -action {action}";
+                if (language == "powershell") { args = $"{absoluteScriptPath} -address {address} -action {action}"; }
+                else { args = $"{absoluteScriptPath} {address} {action}"; } 
             }
             else
             {
-                scriptPath = "..\\..\\..\\scripts\\update.sh";
-                absoluteScriptPath = Path.GetFullPath(Path.Combine(baseDirectory, scriptPath));
-                args = $"{absoluteScriptPath} {address} {action}";
-            }
-            
+                args = $"{absoluteScriptPath} {address}";
+}
+
             _logger.LogInformation($"Base directory: {baseDirectory}");
             _logger.LogInformation($"Script path: {absoluteScriptPath}");
             _logger.LogInformation($"Absolute script path: {absoluteScriptPath}");
@@ -255,7 +263,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             var processStartInfo = new ProcessStartInfo
             {
                 FileName = language,
-                Arguments = $"{absoluteScriptPath} -address {address} -action {action}",
+                Arguments = args,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -263,6 +271,12 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             };
             using var process = new Process { StartInfo = processStartInfo };
             process.Start();
+
+            if (action == "") 
+            { 
+                int pid = process.Id; 
+                await _mongoDbService.SetWorkerPid(address, pid);
+            }
             string output = process.StandardOutput.ReadToEnd();
             string errors = process.StandardError.ReadToEnd();
 

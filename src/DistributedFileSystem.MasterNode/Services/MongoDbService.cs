@@ -166,5 +166,49 @@ namespace DistributedFileSystem.MasterNode.Services
             _logger.LogInformation($"Optimal worker found: {optimalWorker.WorkerAddress} (CPU: {optimalWorker.CpuUsage}%, Memory: {optimalWorker.MemoryUsage}%, Disk: {optimalWorker.DiskSpace}MB)");
             return optimalWorker.WorkerAddress;
         }
+        public async Task<bool> SetWorkerPid(string workerAddress, int pid)
+        {
+            _logger.LogInformation($"Setting pid ({pid}) to worker at the address: {workerAddress} .");
+            var response = await _workerCollection.Find(w => w.WorkerAddress == workerAddress).ToListAsync();
+            if (response.Count == 1)
+            {
+                var worker = response[0];
+                worker.WorkerPid = pid;
+                var updateResult = await _workerCollection.ReplaceOneAsync(
+                    w => w.WorkerAddress == workerAddress,
+                    worker
+                );
+
+                if (updateResult.IsAcknowledged && updateResult.ModifiedCount > 0)
+                {
+                    _logger.LogInformation($"Successfully updated PID to {pid} for worker at {workerAddress}.");
+                    return true;
+                }
+                else
+                {
+                    _logger.LogWarning($"Failed to update PID for worker at {workerAddress}.");
+                    return false;
+                }
+            }
+            else
+            {
+                _logger.LogWarning($"No worker found at address {workerAddress} or multiple workers found.");
+                return false;
+            }
+        }
+
+        public async Task<int> GetWorkerPid(string workerAddress)
+        {
+            var response = await _workerCollection.Find(w => w.WorkerAddress == workerAddress).ToListAsync();
+            if (response.Count == 1) 
+            { 
+                return response[0].WorkerPid; 
+            }
+            else 
+            { 
+                return 0; 
+            }
+        }
+
     }
 }
