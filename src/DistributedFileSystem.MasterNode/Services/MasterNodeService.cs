@@ -237,6 +237,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             DiskSpace = workerResponse.DiskSpace
         };
     }
+
+    // This function allows users to distribute their data to various workers allowing for redundancy
     public override async Task<DistributeFileResponse> DistributeFile(DistributeFileRequest request, ServerCallContext context)
     {
         _logger.LogInformation("Responding to DistributedFile call");
@@ -301,10 +303,12 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             };
         }
     }
+
+    // This funciton will return the files data from all workers storing this data
     public override async Task<RetrieveFileResponse> RetrieveFile(RetrieveFileRequest request, ServerCallContext context)
     {
-        _logger.LogInformation("Responding to DistributedFile call");
-        _metrics.GrpcCallsCounter.WithLabels("DistributeFile").Inc();
+        _logger.LogInformation("Responding to RetrieveFile call");
+        _metrics.GrpcCallsCounter.WithLabels("RetrieveFile").Inc();
         var timer = Stopwatch.StartNew();
         try
         {
@@ -355,6 +359,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         }
     }
 
+    // Deletes files from workers by giving a file name
     public override async Task<DeleteFileResponse> DeleteFile(DeleteFileRequest request, ServerCallContext context)
     {
         _logger.LogInformation("Responding to DeleteFile call");
@@ -423,6 +428,10 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         };
     }
 
+    // THE FOLLOWING ARE HELPER FUNCTIONS
+    // EVENTUALLY WILL BE MOVED TO A HELPER CLASS
+
+    // Distributes byte data to workers
     private async Task DistributeChunkToWorker(string worker, byte[] chunk, string chunkId, string fileName)
     {
         _logger.LogInformation("Responding to DistributeChunkToWorker call");
@@ -456,12 +465,15 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             else { _logger.LogError($"Failed to store chunk {chunkId} on worker {worker}"); }
             _metrics.RequestDuration.WithLabels("DistributeChunkToWorker").Observe(timer.Elapsed.TotalSeconds);
         }
-        _metrics.ErrorCount.WithLabels("DistributeChunkToWorker").Inc();
-        _metrics.RequestDuration.WithLabels("DistributeChunkToWorker").Observe(timer.Elapsed.TotalSeconds);
-        catch (Exception ex) { _logger.LogError(ex, $"Error distributing chunk {chunkId} to worker {worker}"); }
+        catch (Exception ex) 
+        { 
+            _logger.LogError(ex, $"Error distributing chunk {chunkId} to worker {worker}");
+            _metrics.ErrorCount.WithLabels("DistributeChunkToWorker").Inc();
+            _metrics.RequestDuration.WithLabels("DistributeChunkToWorker").Observe(timer.Elapsed.TotalSeconds);
+        }
     }
 
-
+    // General function to allow running processes such as adding/deleteing scrape targets or running/deleting worker nodes
     private async void RunProcess(string language, string address, string path, string action="")
     {
         try
@@ -512,6 +524,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         }
         catch (Exception ex) { _logger.LogError($"Failed to add scrape: {ex}"); }
     }
+
+    // Splits file to chunks based on available workers and chunk size for accuracy
     private List<byte[]> SplitFileToChunks(byte[] fileBytes, int chunkSize)
     {
         var chunks = new List<byte[]>();
@@ -525,6 +539,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         return chunks;
     }
 
+    // Function will retrieve any worker that is not in working status
     private async Task<List<string>> GetAvailableWorkers()
     {
         var availableWorkers = await _mongoDbService.GetAllAvailableWorkers();
