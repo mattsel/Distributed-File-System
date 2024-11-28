@@ -1,6 +1,7 @@
 using DistributedFileSystem.MasterNode;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Google.Protobuf;
 using DistributedFileSystem.MasterNode.Services;
 using DistributedFileSystem.WorkerNode;
 using System.Diagnostics;
@@ -93,7 +94,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         }
     }
 
-    // When called it will delete the worker node from the database so it is no longer an active worker. Requries a https string to remove a node
+    // When called it will delete the worker node from the database so it is no longer an active worker. Requires a https string to remove a node
     public override async Task<DeleteNodeResponse> DeleteNode(DeleteNodeRequest request, ServerCallContext context)
     {
         _logger.LogInformation("Responding to DeleteNode call");
@@ -236,6 +237,172 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             DiskSpace = workerResponse.DiskSpace
         };
     }
+public override async Task<DistributeFileResponse> DistributeFile(DistributeFileRequest request, ServerCallContext context)
+{
+    _logger.LogInformation("Responding to DistributedFile call");
+    _metrics.GrpcCallsCounter.WithLabels("DistributeFile").Inc();
+    var timer = Stopwatch.StartNew();
+
+    try
+    {
+        if (request.FileData == null || request.FileData.Length == 0)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "File data cannot be null or empty."));
+        }
+
+        var fileBytes = request.FileData.ToByteArray();
+        int fileSize = fileBytes.Length;
+
+        var availableWorkers = await GetAvailableWorkers();
+        if (availableWorkers.Count == 0)
+        {
+            _logger.LogWarning("No available workers to distribute the file");
+            return new DistributeFileResponse
+            {
+                Status = false,
+                Message = "No available workers to process the file."
+            };
+        }
+
+        _logger.LogInformation($"Found {availableWorkers.Count} available workers");
+
+        var chunks = SplitFileToChunks(fileBytes, availableWorkers.Count);
+        _logger.LogInformation($"File split into {chunks.Count} chunks");
+
+        var tasks = new List<Task>();
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            var worker = availableWorkers[i % availableWorkers.Count];
+            var chunk = chunks[i];
+            var chunkId = Guid.NewGuid().ToString();
+            tasks.Add(DistributeChunkToWorker(worker, chunk, chunkId, request.FileName));
+        }
+
+        await Task.WhenAll(tasks);
+        _logger.LogInformation("Completed distributing all chunks");
+
+        timer.Stop();
+        _metrics.RequestDuration.WithLabels("DistributeFile").Observe(timer.Elapsed.TotalSeconds);
+
+        return new DistributeFileResponse
+        {
+            Status = true,
+            Message = "File distributed successfully"
+        };
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error during file distribution");
+        return new DistributeFileResponse
+        {
+            Status = false,
+            Message = $"Error during file distribution: {ex.Message}"
+        };
+    }
+}
+public override async Task<RetrieveFileResponse> RetrieveFile(RetrieveFileRequest request, ServerCallContext context)
+{
+    try
+    {
+        var fileMetadata = await _mongoDbService.RetrieveFileFromWorkers(request.FileName);
+
+        if (fileMetadata.Chunks.Count == 0)
+        {
+            return new RetrieveFileResponse
+            {
+                Status = false,
+                Message = "No chunks found for the requested file."
+            };
+        }
+
+        var chunksList = new List<FileChunk>();
+        foreach (var chunk in fileMetadata.Chunks)
+        {
+            chunksList.Add(new FileChunk
+            {
+                ChunkId = chunk.Key,
+                WorkerId = chunk.Value
+            });
+        }
+
+        return new RetrieveFileResponse
+        {
+            Status = true,
+            Message = "File retrieved successfully",
+            FileName = fileMetadata.FileName,
+            FileData = { chunksList }
+        };
+    }
+    catch (Exception ex)
+    {
+        // Log and handle exceptions
+        _logger.LogError(ex, "Error retrieving file.");
+        return new RetrieveFileResponse
+        {
+            Status = false,
+            Message = $"Error retrieving file: {ex.Message}"
+        };
+    }
+}
+
+public override async Task<DeleteFileResponse> DeleteFile(DeleteFileRequest request, ServerCallContext context)
+{
+    var workersWithFiles = await _mongoDbService.RemoveFileFromWorkersAsync(request.FileName);
+    
+}
+
+private List<byte[]> SplitFileToChunks(byte[] fileBytes, int chunkSize)
+{
+    var chunks = new List<byte[]>();
+    for (int i = 0; i < fileBytes.Length; i += chunkSize)
+    {
+        int size = Math.Min(chunkSize, fileBytes.Length - i);
+        var chunk = new byte[size];
+        Array.Copy(fileBytes, i, chunk, 0, size);
+        chunks.Add(chunk);
+    }
+    return chunks;
+}
+
+private async Task<List<string>> GetAvailableWorkers()
+{
+    var availableWorkers = await _mongoDbService.GetAllAvailableWorkers();
+    return availableWorkers;
+}
+
+private async Task DistributeChunkToWorker(string worker, byte[] chunk, string chunkId, string fileName)
+{
+    try
+    {
+        var channel = GrpcChannel.ForAddress(worker);
+        var client = new WorkerNode.WorkerNodeClient(channel);
+
+        await _mongoDbService.UpdateWorkerStatus(worker, "working", fileName, chunkId);
+
+        var workerRequest = new StoreChunkRequest { ChunkId = chunkId, ChunkData = ByteString.CopyFrom(chunk) };
+        var workerResponse = await client.StoreChunkAsync(workerRequest);
+
+        if (workerResponse.Status)
+        {
+            _logger.LogInformation($"Chunk {chunkId} stored successfully at worker {worker}");
+
+            var resourceRequest = new ResourceUsageRequest { WorkerAddress = worker };
+            var resourceResponse = await client.ResourceUsageAsync(resourceRequest);
+
+            await _mongoDbService.UpdateWorkerMetadata(
+                worker,
+                "waiting",
+                resourceResponse.CpuUsage,
+                resourceResponse.MemoryUsage,
+                resourceResponse.DiskSpace
+            );
+        }
+        else { _logger.LogError($"Failed to store chunk {chunkId} on worker {worker}"); }
+    }
+    catch (Exception ex) { _logger.LogError(ex, $"Error distributing chunk {chunkId} to worker {worker}"); }
+}
+
+
     private async void RunProcess(string language, string address, string path, string action="")
     {
         try
@@ -252,7 +419,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             else
             {
                 args = $"{absoluteScriptPath} {address}";
-}
+            }
 
             _logger.LogInformation($"Base directory: {baseDirectory}");
             _logger.LogInformation($"Script path: {absoluteScriptPath}");
@@ -286,4 +453,5 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         }
         catch (Exception ex) { _logger.LogError($"Failed to add scrape: {ex}"); }
     }
+    
 }

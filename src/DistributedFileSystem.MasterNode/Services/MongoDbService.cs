@@ -210,5 +210,67 @@ namespace DistributedFileSystem.MasterNode.Services
             }
         }
 
+        public async Task<List<string>> GetAllAvailableWorkers()
+        {
+            var available = new List<string>();
+            var response = await _workerCollection.Find(w => w.Status == "waiting").ToListAsync();
+            foreach (var worker in response)
+            {
+                available.Add(worker.WorkerAddress);
+            }
+            return available;
+        }
+
+        public async Task<FileMetadata> RetrieveFileFromWorkers(string fileName)
+        {
+            var completeFile = new FileMetadata
+            {
+                FileName = fileName,
+                Chunks = new Dictionary<string, string>()
+            };
+            var workers = await _workerCollection
+                .Find(worker => worker.Files.Exists(f => f.FileName == fileName))
+                .ToListAsync();
+
+            foreach (var worker in workers)
+            {
+                var file = worker.Files.Find(f => f.FileName == fileName);
+                if (file != null)
+                {
+                    foreach (var chunk in file.Chunks)
+                    {
+                        completeFile.Chunks[chunk.Key] = chunk.Value;
+                    }
+                }
+            }
+            return completeFile;
+        }
+
+        public async Task<List<string>> RemoveFileFromWorkersAsync(string fileName)
+        {
+            var workersWithFile = await _workerCollection
+                .Find(worker => worker.Files.Any(f => f.FileName == fileName))
+                .ToListAsync();
+
+            if (workersWithFile.Count == 0) { return new List<string>(); }
+            
+            var workerAddressesWithFileRemoved = new List<string>();
+            foreach (var worker in workersWithFile)
+            {
+                var fileMetadata = worker.Files.FirstOrDefault(f => f.FileName == fileName);
+                if (fileMetadata != null)
+                {
+                    worker.Files.Remove(fileMetadata);
+                    
+                    var updateResult = await _workerCollection.ReplaceOneAsync(
+                        w => w.Id == worker.Id, worker);
+                    if (updateResult.ModifiedCount > 0)
+                    {
+                        workerAddressesWithFileRemoved.Add(worker.WorkerAddress);
+                    }
+                }
+            }
+            return workerAddressesWithFileRemoved;
+        }
     }
 }

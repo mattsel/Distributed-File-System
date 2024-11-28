@@ -89,10 +89,16 @@ message RetrieveFileRequest {
     string fileName = 1;
 }
 
+message FileChunk {
+  string chunkId = 1;
+  string workerId = 2;
+}
+
 message RetrieveFileResponse {
     bool status = 1;
     string message = 2;
-    bytes fileData = 3;
+    string fileName = 3;
+    repeated FileChunk fileData = 4;
 }
 
 message ReplicateFileChunksRequest {

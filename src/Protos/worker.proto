@@ -29,11 +29,11 @@ message GetChunkResponse {
     bytes chunkData = 3;
 }
 
-message DeleteChunkRequest {
-    string chunkId = 1;
+message DeleteFileRequest {
+    string fileName = 1;
 }
 
-message DeleteChunkResponse {
+message DeleteFileResponse {
     bool status = 1;
     string message = 2;
 }
