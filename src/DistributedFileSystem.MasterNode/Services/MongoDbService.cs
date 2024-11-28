@@ -246,13 +246,36 @@ namespace DistributedFileSystem.MasterNode.Services
             return completeFile;
         }
 
-        public async Task<List<string>> RemoveFileFromWorkersAsync(string fileName)
+        public async Task<List<string>> GetChunkIdsForFile(string fileName)
         {
             var workersWithFile = await _workerCollection
                 .Find(worker => worker.Files.Any(f => f.FileName == fileName))
                 .ToListAsync();
 
-            if (workersWithFile.Count == 0) { return new List<string>(); }
+            var chunkIds = new List<string>();
+
+            foreach (var worker in workersWithFile)
+            {
+                var fileMetadata = worker.Files.FirstOrDefault(f => f.FileName == fileName);
+                if (fileMetadata != null)
+                {
+                    foreach (var chunk in fileMetadata.Chunks.Keys)
+                    {
+                        chunkIds.Add(chunk);
+                    }
+                }
+            }
+
+            return chunkIds;
+        }
+
+        public async Task<List<string>> RemoveFileFromWorkers(string fileName)
+        {
+            var workersWithFile = await _workerCollection
+                .Find(worker => worker.Files.Any(f => f.FileName == fileName))
+                .ToListAsync();
+
+            if (workersWithFile.Count > 0) { return new List<string>(); }
             
             var workerAddressesWithFileRemoved = new List<string>();
             foreach (var worker in workersWithFile)

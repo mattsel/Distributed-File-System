@@ -237,170 +237,229 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             DiskSpace = workerResponse.DiskSpace
         };
     }
-public override async Task<DistributeFileResponse> DistributeFile(DistributeFileRequest request, ServerCallContext context)
-{
-    _logger.LogInformation("Responding to DistributedFile call");
-    _metrics.GrpcCallsCounter.WithLabels("DistributeFile").Inc();
-    var timer = Stopwatch.StartNew();
-
-    try
+    public override async Task<DistributeFileResponse> DistributeFile(DistributeFileRequest request, ServerCallContext context)
     {
-        if (request.FileData == null || request.FileData.Length == 0)
+        _logger.LogInformation("Responding to DistributedFile call");
+        _metrics.GrpcCallsCounter.WithLabels("DistributeFile").Inc();
+        var timer = Stopwatch.StartNew();
+
+        try
         {
-            throw new RpcException(new Status(StatusCode.InvalidArgument, "File data cannot be null or empty."));
+            if (request.FileData == null || request.FileData.Length == 0)
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "File data cannot be null or empty."));
+            }
+
+            var fileBytes = request.FileData.ToByteArray();
+            int fileSize = fileBytes.Length;
+
+            var availableWorkers = await GetAvailableWorkers();
+            if (availableWorkers.Count == 0)
+            {
+                _logger.LogWarning("No available workers to distribute the file");
+                return new DistributeFileResponse
+                {
+                    Status = false,
+                    Message = "No available workers to process the file."
+                };
+            }
+
+            _logger.LogInformation($"Found {availableWorkers.Count} available workers");
+
+            var chunks = SplitFileToChunks(fileBytes, availableWorkers.Count);
+            _logger.LogInformation($"File split into {chunks.Count} chunks");
+
+            var tasks = new List<Task>();
+            for (int i = 0; i < chunks.Count; i++)
+            {
+                var worker = availableWorkers[i % availableWorkers.Count];
+                var chunk = chunks[i];
+                var chunkId = Guid.NewGuid().ToString();
+                tasks.Add(DistributeChunkToWorker(worker, chunk, chunkId, request.FileName));
+            }
+
+            await Task.WhenAll(tasks);
+            _logger.LogInformation("Completed distributing all chunks");
+
+            timer.Stop();
+            _metrics.RequestDuration.WithLabels("DistributeFile").Observe(timer.Elapsed.TotalSeconds);
+
+            return new DistributeFileResponse
+            {
+                Status = true,
+                Message = "File distributed successfully"
+            };
         }
-
-        var fileBytes = request.FileData.ToByteArray();
-        int fileSize = fileBytes.Length;
-
-        var availableWorkers = await GetAvailableWorkers();
-        if (availableWorkers.Count == 0)
+        catch (Exception ex)
         {
-            _logger.LogWarning("No available workers to distribute the file");
+            _logger.LogError(ex, "Error during file distribution");
+            _metrics.ErrorCount.WithLabels("DistributeFile").Inc();
             return new DistributeFileResponse
             {
                 Status = false,
-                Message = "No available workers to process the file."
+                Message = $"Error during file distribution: {ex.Message}"
             };
         }
-
-        _logger.LogInformation($"Found {availableWorkers.Count} available workers");
-
-        var chunks = SplitFileToChunks(fileBytes, availableWorkers.Count);
-        _logger.LogInformation($"File split into {chunks.Count} chunks");
-
-        var tasks = new List<Task>();
-        for (int i = 0; i < chunks.Count; i++)
+    }
+    public override async Task<RetrieveFileResponse> RetrieveFile(RetrieveFileRequest request, ServerCallContext context)
+    {
+        _logger.LogInformation("Responding to DistributedFile call");
+        _metrics.GrpcCallsCounter.WithLabels("DistributeFile").Inc();
+        var timer = Stopwatch.StartNew();
+        try
         {
-            var worker = availableWorkers[i % availableWorkers.Count];
-            var chunk = chunks[i];
-            var chunkId = Guid.NewGuid().ToString();
-            tasks.Add(DistributeChunkToWorker(worker, chunk, chunkId, request.FileName));
+            var fileMetadata = await _mongoDbService.RetrieveFileFromWorkers(request.FileName);
+
+            if (fileMetadata.Chunks.Count == 0)
+            {
+                timer.Stop();
+                _metrics.RequestDuration.WithLabels("RetrieveFile").Observe(timer.Elapsed.TotalSeconds);
+                return new RetrieveFileResponse
+                {
+                    Status = false,
+                    Message = "No chunks found for the requested file."
+                };
+            }
+
+            var chunksList = new List<FileChunk>();
+            foreach (var chunk in fileMetadata.Chunks)
+            {
+                chunksList.Add(new FileChunk
+                {
+                    ChunkId = chunk.Key,
+                    WorkerId = chunk.Value
+                });
+            }
+            timer.Stop();
+            _metrics.RequestDuration.WithLabels("RetrieveFile").Observe(timer.Elapsed.TotalSeconds);
+            return new RetrieveFileResponse
+            {
+                Status = true,
+                Message = "File retrieved successfully",
+                FileName = fileMetadata.FileName,
+                FileData = { chunksList }
+            };
         }
-
-        await Task.WhenAll(tasks);
-        _logger.LogInformation("Completed distributing all chunks");
-
-        timer.Stop();
-        _metrics.RequestDuration.WithLabels("DistributeFile").Observe(timer.Elapsed.TotalSeconds);
-
-        return new DistributeFileResponse
+        catch (Exception ex)
         {
-            Status = true,
-            Message = "File distributed successfully"
-        };
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Error during file distribution");
-        return new DistributeFileResponse
-        {
-            Status = false,
-            Message = $"Error during file distribution: {ex.Message}"
-        };
-    }
-}
-public override async Task<RetrieveFileResponse> RetrieveFile(RetrieveFileRequest request, ServerCallContext context)
-{
-    try
-    {
-        var fileMetadata = await _mongoDbService.RetrieveFileFromWorkers(request.FileName);
-
-        if (fileMetadata.Chunks.Count == 0)
-        {
+            
+            _logger.LogError(ex, "Error retrieving file.");
+            timer.Stop();
+            _metrics.ErrorCount.WithLabels("RetrieveFile").Inc();
+            _metrics.RequestDuration.WithLabels("RetrieveFile").Observe(timer.Elapsed.TotalSeconds);
             return new RetrieveFileResponse
             {
                 Status = false,
-                Message = "No chunks found for the requested file."
+                Message = $"Error retrieving file: {ex.Message}"
+            };
+        }
+    }
+
+    public override async Task<DeleteFileResponse> DeleteFile(DeleteFileRequest request, ServerCallContext context)
+    {
+        _logger.LogInformation("Responding to DeleteFile call");
+        _metrics.GrpcCallsCounter.WithLabels("DeleteFile").Inc();
+        var timer = Stopwatch.StartNew();
+        var chunkIds = await _mongoDbService.GetChunkIdsForFile(request.FileName);
+
+        if (chunkIds.Count == 0)
+        {
+            _metrics.RequestDuration.WithLabels("DeleteFile").Observe(timer.Elapsed.TotalSeconds);
+            return new DeleteFileResponse
+            {
+                Status = false,
+                Message = "No chunks found for the specified file."
             };
         }
 
-        var chunksList = new List<FileChunk>();
-        foreach (var chunk in fileMetadata.Chunks)
+        var workersWithFileRemoved = await _mongoDbService.RemoveFileFromWorkers(request.FileName);
+
+        if (workersWithFileRemoved.Count == 0)
         {
-            chunksList.Add(new FileChunk
+            _metrics.RequestDuration.WithLabels("DeleteFile").Observe(timer.Elapsed.TotalSeconds);
+            return new DeleteFileResponse
             {
-                ChunkId = chunk.Key,
-                WorkerId = chunk.Value
-            });
+                Status = false,
+                Message = "No workers found with the specified file or file already removed."
+            };
         }
 
-        return new RetrieveFileResponse
+        var chunkDeletionResults = new List<string>();
+
+        foreach (var workerAddress in workersWithFileRemoved)
+        {
+            var channel = GrpcChannel.ForAddress(workerAddress);
+            var client = new WorkerNode.WorkerNodeClient(channel);
+
+            try
+            {
+                foreach (var chunkId in chunkIds)
+                {
+                    var deleteChunkRequest = new DeleteChunkRequest { ChunkId = chunkId };
+                    var deleteChunkResponse = await client.DeleteChunkAsync(deleteChunkRequest);
+                    if (deleteChunkResponse.Status)
+                    {
+                        chunkDeletionResults.Add($"Successfully deleted chunk {chunkId} from worker {workerAddress}");
+                    }
+                    else
+                    {
+                        chunkDeletionResults.Add($"Failed to delete chunk {chunkId} from worker {workerAddress}: {deleteChunkResponse.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _metrics.ErrorCount.WithLabels("DeleteFile").Inc();
+                _metrics.RequestDuration.WithLabels("DeleteFile").Observe(timer.Elapsed.TotalSeconds);
+                chunkDeletionResults.Add($"Error calling DeleteChunk on worker {workerAddress}: {ex.Message}");
+            }
+        }
+        var deletionMessage = string.Join("\n", chunkDeletionResults);
+        _metrics.RequestDuration.WithLabels("DeleteFile").Observe(timer.Elapsed.TotalSeconds);
+        return new DeleteFileResponse
         {
             Status = true,
-            Message = "File retrieved successfully",
-            FileName = fileMetadata.FileName,
-            FileData = { chunksList }
+            Message = $"File {request.FileName} deletion results:\n{deletionMessage}"
         };
     }
-    catch (Exception ex)
+
+    private async Task DistributeChunkToWorker(string worker, byte[] chunk, string chunkId, string fileName)
     {
-        // Log and handle exceptions
-        _logger.LogError(ex, "Error retrieving file.");
-        return new RetrieveFileResponse
+        _logger.LogInformation("Responding to DistributeChunkToWorker call");
+        _metrics.GrpcCallsCounter.WithLabels("DistributeChunkToWorker").Inc();
+        var timer = Stopwatch.StartNew();
+        try
         {
-            Status = false,
-            Message = $"Error retrieving file: {ex.Message}"
-        };
-    }
-}
+            var channel = GrpcChannel.ForAddress(worker);
+            var client = new WorkerNode.WorkerNodeClient(channel);
 
-public override async Task<DeleteFileResponse> DeleteFile(DeleteFileRequest request, ServerCallContext context)
-{
-    var workersWithFiles = await _mongoDbService.RemoveFileFromWorkersAsync(request.FileName);
-    
-}
+            await _mongoDbService.UpdateWorkerStatus(worker, "working", fileName, chunkId);
 
-private List<byte[]> SplitFileToChunks(byte[] fileBytes, int chunkSize)
-{
-    var chunks = new List<byte[]>();
-    for (int i = 0; i < fileBytes.Length; i += chunkSize)
-    {
-        int size = Math.Min(chunkSize, fileBytes.Length - i);
-        var chunk = new byte[size];
-        Array.Copy(fileBytes, i, chunk, 0, size);
-        chunks.Add(chunk);
-    }
-    return chunks;
-}
+            var workerRequest = new StoreChunkRequest { ChunkId = chunkId, ChunkData = ByteString.CopyFrom(chunk) };
+            var workerResponse = await client.StoreChunkAsync(workerRequest);
 
-private async Task<List<string>> GetAvailableWorkers()
-{
-    var availableWorkers = await _mongoDbService.GetAllAvailableWorkers();
-    return availableWorkers;
-}
+            if (workerResponse.Status)
+            {
+                _logger.LogInformation($"Chunk {chunkId} stored successfully at worker {worker}");
 
-private async Task DistributeChunkToWorker(string worker, byte[] chunk, string chunkId, string fileName)
-{
-    try
-    {
-        var channel = GrpcChannel.ForAddress(worker);
-        var client = new WorkerNode.WorkerNodeClient(channel);
+                var resourceRequest = new ResourceUsageRequest { WorkerAddress = worker };
+                var resourceResponse = await client.ResourceUsageAsync(resourceRequest);
 
-        await _mongoDbService.UpdateWorkerStatus(worker, "working", fileName, chunkId);
-
-        var workerRequest = new StoreChunkRequest { ChunkId = chunkId, ChunkData = ByteString.CopyFrom(chunk) };
-        var workerResponse = await client.StoreChunkAsync(workerRequest);
-
-        if (workerResponse.Status)
-        {
-            _logger.LogInformation($"Chunk {chunkId} stored successfully at worker {worker}");
-
-            var resourceRequest = new ResourceUsageRequest { WorkerAddress = worker };
-            var resourceResponse = await client.ResourceUsageAsync(resourceRequest);
-
-            await _mongoDbService.UpdateWorkerMetadata(
-                worker,
-                "waiting",
-                resourceResponse.CpuUsage,
-                resourceResponse.MemoryUsage,
-                resourceResponse.DiskSpace
-            );
+                await _mongoDbService.UpdateWorkerMetadata(
+                    worker,
+                    "waiting",
+                    resourceResponse.CpuUsage,
+                    resourceResponse.MemoryUsage,
+                    resourceResponse.DiskSpace
+                );
+            }
+            else { _logger.LogError($"Failed to store chunk {chunkId} on worker {worker}"); }
+            _metrics.RequestDuration.WithLabels("DistributeChunkToWorker").Observe(timer.Elapsed.TotalSeconds);
         }
-        else { _logger.LogError($"Failed to store chunk {chunkId} on worker {worker}"); }
+        _metrics.ErrorCount.WithLabels("DistributeChunkToWorker").Inc();
+        _metrics.RequestDuration.WithLabels("DistributeChunkToWorker").Observe(timer.Elapsed.TotalSeconds);
+        catch (Exception ex) { _logger.LogError(ex, $"Error distributing chunk {chunkId} to worker {worker}"); }
     }
-    catch (Exception ex) { _logger.LogError(ex, $"Error distributing chunk {chunkId} to worker {worker}"); }
-}
 
 
     private async void RunProcess(string language, string address, string path, string action="")
@@ -453,5 +512,23 @@ private async Task DistributeChunkToWorker(string worker, byte[] chunk, string c
         }
         catch (Exception ex) { _logger.LogError($"Failed to add scrape: {ex}"); }
     }
-    
+    private List<byte[]> SplitFileToChunks(byte[] fileBytes, int chunkSize)
+    {
+        var chunks = new List<byte[]>();
+        for (int i = 0; i < fileBytes.Length; i += chunkSize)
+        {
+            int size = Math.Min(chunkSize, fileBytes.Length - i);
+            var chunk = new byte[size];
+            Array.Copy(fileBytes, i, chunk, 0, size);
+            chunks.Add(chunk);
+        }
+        return chunks;
+    }
+
+    private async Task<List<string>> GetAvailableWorkers()
+    {
+        var availableWorkers = await _mongoDbService.GetAllAvailableWorkers();
+        return availableWorkers;
+    }
+
 }
