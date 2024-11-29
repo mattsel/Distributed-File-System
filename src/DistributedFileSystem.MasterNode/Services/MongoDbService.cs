@@ -169,7 +169,8 @@ namespace DistributedFileSystem.MasterNode.Services
         public async Task<bool> SetWorkerPid(string workerAddress, int pid)
         {
             _logger.LogInformation($"Setting pid ({pid}) to worker at the address: {workerAddress} .");
-            var response = await _workerCollection.Find(w => w.WorkerAddress == workerAddress).ToListAsync();
+            var response = await _workerCollection.Find(w => w.WorkerAddress.Trim() == workerAddress.Trim()).ToListAsync();
+            _logger.LogInformation($"{response.Count}");
             if (response.Count == 1)
             {
                 var worker = response[0];

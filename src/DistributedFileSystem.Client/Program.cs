@@ -1,10 +1,6 @@
 using DistributedFileSystem.MasterNode;
 using Grpc.Net.Client;
 
-// <summary>
-// This is the entry point for the client to interact with the master node. This client is unable to interact with the worker nodes
-// as it uses the master node to interact with the worker nodes in the most optimal way. 
-// </summary>
 class Program
 {
     public static async Task Main(string[] args)
@@ -12,7 +8,6 @@ class Program
         var builder = WebApplication.CreateBuilder(args);
         builder.Services.AddGrpc();
 
-        // Maps the master node's https address to send gRPC requests to
         builder.Services.AddSingleton<MasterNode.MasterNodeClient>(provider =>
         {
             var channel = GrpcChannel.ForAddress("https://localhost:5001");
@@ -21,9 +16,6 @@ class Program
 
         var app = builder.Build();
 
-        // EACH OF THESE ARE ENDPOINTS THAT CAN BE USED TO TEST gRPC CALLS IN DEVELOPMENT
-        // Ex. curl https://localhost:5001/CreateNode or curl https://locatlhost:5001/HandleFiles
-        // THIS USES GET REQUESTS TO TRIGGER A SET RESPONSE FOR TESTING PURPOSES
         app.MapGet("/", async context =>
         {
             await context.Response.WriteAsync("Client Node is running.");
@@ -31,13 +23,13 @@ class Program
 
         app.MapGet("/CreateNode", async (MasterNode.MasterNodeClient client) =>
         {
-            var response = await client.CreateNodeAsync(new CreateNodeRequest { WorkerAddress = "https://localhost:5002" });
+            var response = await client.CreateNodeAsync(new CreateNodeRequest { WorkerAddress = "https://localhost:5003" });
             return Results.Ok(response.Message);
         });
 
         app.MapGet("/DeleteNode", async (MasterNode.MasterNodeClient client) =>
         {
-            var response = await client.DeleteNodeAsync(new DeleteNodeRequest { WorkerAddress = "6000" });
+            var response = await client.DeleteNodeAsync(new DeleteNodeRequest { WorkerAddress = "https://localhost:5003" });
             return Results.Ok(response.Message);
         });
 
@@ -67,9 +59,37 @@ class Program
 
         app.MapGet("/GetWorkerResources", async (MasterNode.MasterNodeClient client) =>
         {
-            var response = await client.GetWorkerResourcesAsync(new GetWorkerResourcesRequest { WorkerAddress = "worker1" });
+            var response = await client.GetWorkerResourcesAsync(new GetWorkerResourcesRequest { WorkerAddress = "https://localhost:5003" });
             return Results.Ok(response);
         });
+
+        app.MapGet("/DistributeFile", async (MasterNode.MasterNodeClient client, HttpContext context) =>
+        {
+            var chunkData = new byte[] { 0x01, 0x02, 0x03 };
+            var request = new DistributeFileRequest
+            {
+                FileName = "example.txt",
+                FileData = Google.Protobuf.ByteString.CopyFrom(chunkData),
+            };
+
+            var response = await client.DistributeFileAsync(request);
+            return Results.Ok(response.Message);
+        });
+
+        app.MapGet("/RetrieveFile", async (MasterNode.MasterNodeClient client, HttpContext context) =>
+        {
+            string fileName = "example.txt";
+            var response = await client.RetrieveFileAsync(new RetrieveFileRequest { FileName = fileName });
+            return Results.Ok(response);
+        });
+
+        app.MapGet("/DeleteFile", async (MasterNode.MasterNodeClient client, HttpContext context) =>
+        {
+            string fileName = "example.txt";
+            var response = await client.DeleteFileAsync(new DeleteFileRequest { FileName = fileName });
+            return Results.Ok(response.Message);
+        });
+
 
         var url = "https://localhost:5000";
         Console.WriteLine($"Client Node listening on {url}");

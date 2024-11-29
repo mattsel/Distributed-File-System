@@ -35,10 +35,9 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         _logger.LogInformation("Responding to CreateNode call.");
         _metrics.GrpcCallsCounter.WithLabels("CreateNode").Inc();
         var timer = Stopwatch.StartNew();
-        string port = request.WorkerAddress.ToString().Split(":")[2];
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { RunProcess("powershell", port, "..\\..\\..\\scripts\\createWorker.ps1"); }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { RunProcess("bash", port, "..\\..\\..\\scripts\\createWorker.sh"); }
-        else { _logger.LogError("Unable to add scrape target"); }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await RunProcess("powershell", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\createWorker.ps1"); }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await RunProcess("bash", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\createWorker.sh"); }
+        else { _logger.LogError("Unable to add start worker node"); }
         var channel = GrpcChannel.ForAddress(request.WorkerAddress);
         var client = new WorkerNode.WorkerNodeClient(channel);
         var resourceRequest = new ResourceUsageRequest();
@@ -56,41 +55,29 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             return new CreateNodeResponse { Status = false, Message = "Failed to retrieve worker resources." };
         }
 
-        bool response = await _mongoDbService.CreateNode(request.WorkerAddress);
+        _logger.LogInformation("Successfully created node.");
+        var updateResourceResult = await _mongoDbService.UpdateWorkerMetadata(
+            request.WorkerAddress,
+            "waiting",
+            resourceResponse.CpuUsage,
+            resourceResponse.MemoryUsage,
+            resourceResponse.DiskSpace);
 
-        if (response)
+        if (updateResourceResult)
         {
-            _logger.LogInformation("Successfully created node.");
-            var updateResourceResult = await _mongoDbService.UpdateWorkerMetadata(
-                request.WorkerAddress,
-                "waiting",
-                resourceResponse.CpuUsage,
-                resourceResponse.MemoryUsage,
-                resourceResponse.DiskSpace);
-
-            if (updateResourceResult)
-            {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { RunProcess("powershell", $"https://localhost:{port}", "CreateNode", "..\\..\\..\\scripts\\scrape.ps1"); }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { RunProcess("bash", $"https://localhost:{port}", "CreateNode", "..\\..\\..\\scripts\\scrape.sh"); }
-                else { _logger.LogError("Unable to add scrape target"); }
-                _logger.LogInformation("Successfully updated worker metadata with resource usage.");
-                _metrics.RequestDuration.WithLabels("CreateNode").Observe(timer.Elapsed.TotalSeconds);
-                return new CreateNodeResponse { Status = true, Message = "Node created successfully with resources." };
-            }
-            else
-            {
-                _logger.LogError("Failed to update worker metadata in MongoDB.");
-                _metrics.ErrorCount.WithLabels("CreateNode").Inc();
-                _metrics.RequestDuration.WithLabels("CreateNode").Observe(timer.Elapsed.TotalSeconds);
-                return new CreateNodeResponse { Status = false, Message = "Failed to update worker metadata in MongoDB." };
-            }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await RunProcess("powershell", request.WorkerAddress.ToString(), "CreateNode", "..\\..\\..\\scripts\\scrape.ps1"); }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await RunProcess("bash", request.WorkerAddress.ToString(), "CreateNode", "..\\..\\..\\scripts\\scrape.sh"); }
+            else { _logger.LogError("Unable to add scrape target"); }
+            _logger.LogInformation("Successfully updated worker metadata with resource usage.");
+            _metrics.RequestDuration.WithLabels("CreateNode").Observe(timer.Elapsed.TotalSeconds);
+            return new CreateNodeResponse { Status = true, Message = "Node created successfully with resources." };
         }
         else
         {
-            _logger.LogError("Failed to create node.");
+            _logger.LogError("Failed to update worker metadata in MongoDB.");
             _metrics.ErrorCount.WithLabels("CreateNode").Inc();
             _metrics.RequestDuration.WithLabels("CreateNode").Observe(timer.Elapsed.TotalSeconds);
-            return new CreateNodeResponse { Status = false, Message = "Node creation failed." };
+            return new CreateNodeResponse { Status = false, Message = "Failed to update worker metadata in MongoDB." };
         }
     }
 
@@ -102,15 +89,22 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         var timer = Stopwatch.StartNew();
         int workerPid = await _mongoDbService.GetWorkerPid(request.WorkerAddress);
         Process process = Process.GetProcessById(workerPid);
-        process.Kill();
-        Console.WriteLine($"Process with PID {workerPid} has been terminated.");
+        if (!process.HasExited)
+        {
+            process.Kill();
+            Console.WriteLine($"Process with PID {workerPid} has been terminated.");
+        }
+        else
+        {
+            Console.WriteLine($"Process with PID {workerPid} has already exited.");
+        }
 
         bool response = await _mongoDbService.DeleteNode(request.WorkerAddress);
         if (response)
         {
             _logger.LogInformation("Successfully deleted node");
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { RunProcess("powershell", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.ps1"); }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { RunProcess("bash", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.sh"); }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await RunProcess("powershell", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.ps1"); }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await RunProcess("bash", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.sh"); }
             else { _logger.LogError("Unable to remove scrape target"); }
             _metrics.RequestDuration.WithLabels("DeleteNode").Observe(timer.Elapsed.TotalSeconds);
             return new DeleteNodeResponse { Status = true, Message = "Node deleted successfully." };
@@ -474,7 +468,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
     }
 
     // General function to allow running processes such as adding/deleteing scrape targets or running/deleting worker nodes
-    private async void RunProcess(string language, string address, string path, string action="")
+    private async Task RunProcess(string language, string address, string path, string action="")
     {
         try
         {
@@ -489,7 +483,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             }
             else
             {
-                args = $"{absoluteScriptPath} {address}";
+                string port = address.ToString().Split(":")[2];
+                args = $"{absoluteScriptPath} {port}";
             }
 
             _logger.LogInformation($"Base directory: {baseDirectory}");
@@ -511,8 +506,9 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             process.Start();
 
             if (action == "") 
-            { 
-                int pid = process.Id; 
+            {
+                await _mongoDbService.CreateNode(address);
+                int pid = process.Id;
                 await _mongoDbService.SetWorkerPid(address, pid);
             }
             string output = process.StandardOutput.ReadToEnd();
