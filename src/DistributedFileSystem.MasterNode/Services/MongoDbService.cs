@@ -80,6 +80,11 @@ namespace DistributedFileSystem.MasterNode.Services
         // Allows the master node to update the worker status to either be working or waiting. This helps the master node to load balance
         public async Task<bool> UpdateWorkerStatus(string workerAddress, string status, string fileName, string chunkId)
         {
+
+            var filter = Builders<WorkerMetadata>.Filter.ElemMatch(w => w.Files, f => f.FileName == fileName);
+            var workers = await _workerCollection.Find(filter).ToListAsync();
+
+
             _logger.LogInformation("Beginning to update worker's status");
             var filter = Builders<WorkerMetadata>.Filter.Eq(w => w.WorkerAddress, workerAddress);
             var update = Builders<WorkerMetadata>.Update.Combine(

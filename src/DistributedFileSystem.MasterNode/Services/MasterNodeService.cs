@@ -428,8 +428,6 @@ public class MasterNodeService : MasterNode.MasterNodeBase
     // Distributes byte data to workers
     private async Task DistributeChunkToWorker(string worker, byte[] chunk, string chunkId, string fileName)
     {
-        _logger.LogInformation("Responding to DistributeChunkToWorker call");
-        _metrics.GrpcCallsCounter.WithLabels("DistributeChunkToWorker").Inc();
         var timer = Stopwatch.StartNew();
         try
         {
@@ -462,8 +460,6 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         catch (Exception ex) 
         { 
             _logger.LogError(ex, $"Error distributing chunk {chunkId} to worker {worker}");
-            _metrics.ErrorCount.WithLabels("DistributeChunkToWorker").Inc();
-            _metrics.RequestDuration.WithLabels("DistributeChunkToWorker").Observe(timer.Elapsed.TotalSeconds);
         }
     }
 
