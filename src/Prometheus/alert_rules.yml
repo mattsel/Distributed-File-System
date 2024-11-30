@@ -1,0 +1,29 @@
+groups:
+  - name: worker-nodes
+    rules:
+      - alert: HighCPUUsage
+        expr: worker_node_cpu_usage_percentage > 90  #90% CPU
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High CPU usage on worker {{ $labels.worker }}"
+          description: "CPU usage on worker {{ $labels.worker }} is above 90% for more than 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: worker_node_memory_usage_bytes > 85899345920 # 80GB
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on worker {{ $labels.worker }}"
+          description: "Memory usage on worker {{ $labels.worker }} is above 80GB for more than 5 minutes."
+
+      - alert: LowDiskSpace
+        expr: worker_node_available_disk_space_bytes < 1073741824 # 1GB
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space on worker {{ $labels.worker }}"
+          description: "Available disk space on worker {{ $labels.worker }} is below 1GB for more than 10 minutes."

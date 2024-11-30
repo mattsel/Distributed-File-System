@@ -1,3 +1,5 @@
+src/k8s/secrets.yaml
+*appsettings*
 bin/
 obj/
 .vs/

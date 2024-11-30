@@ -1,0 +1,16 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: 'email-receiver'
+
+receivers:
+  - name: 'email-receiver'
+    email_configs:
+      - to: 'youremail@example.com'
+        from: '${SMTP_FROM}'
+        smarthost: '${SMTP_SMARTHOST}'
+        auth_username: '${SMTP_AUTH_USERNAME}'
+        auth_password: '${SMTP_AUTH_PASSWORD}'
+        require_tls: false
+        send_resolved: true
