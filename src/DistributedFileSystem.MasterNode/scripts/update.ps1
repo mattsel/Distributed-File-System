@@ -50,8 +50,6 @@ function Remove-ScrapeConfig {
     )
     $configContent = Get-Content $configFilePath -Raw
 
-    $address = $address -replace "^https://", ""
-
     $scrapeConfig = @"
   - job_name: 'scrape_$address'
     scrape_interval: 15s

@@ -136,7 +136,7 @@ namespace DistributedFileSystem.MasterNode.Services
         }
 
         // This uses worker's resources and status to help choose a worker that can handle the request with the least amount of latency possible
-        public async Task<string?> GetOptimalWorker(long chunkSize)
+        public async Task<string?> GetOptimalWorker(int chunkSize)
         {
             _logger.LogInformation("Fetching most optimal worker with status 'waiting' and sufficient disk space.");
 
@@ -165,112 +165,6 @@ namespace DistributedFileSystem.MasterNode.Services
 
             _logger.LogInformation($"Optimal worker found: {optimalWorker.WorkerAddress} (CPU: {optimalWorker.CpuUsage}%, Memory: {optimalWorker.MemoryUsage}%, Disk: {optimalWorker.DiskSpace}MB)");
             return optimalWorker.WorkerAddress;
-        }
-        public async Task<bool> SetWorkerPid(string workerAddress, int pid)
-        {
-            _logger.LogInformation($"Setting pid ({pid}) to worker at the address: {workerAddress} .");
-            var response = await _workerCollection.Find(w => w.WorkerAddress == workerAddress).ToListAsync();
-            if (response.Count == 1)
-            {
-                var worker = response[0];
-                worker.WorkerPid = pid;
-                var updateResult = await _workerCollection.ReplaceOneAsync(
-                    w => w.WorkerAddress == workerAddress,
-                    worker
-                );
-
-                if (updateResult.IsAcknowledged && updateResult.ModifiedCount > 0)
-                {
-                    _logger.LogInformation($"Successfully updated PID to {pid} for worker at {workerAddress}.");
-                    return true;
-                }
-                else
-                {
-                    _logger.LogWarning($"Failed to update PID for worker at {workerAddress}.");
-                    return false;
-                }
-            }
-            else
-            {
-                _logger.LogWarning($"No worker found at address {workerAddress} or multiple workers found.");
-                return false;
-            }
-        }
-
-        public async Task<int> GetWorkerPid(string workerAddress)
-        {
-            var response = await _workerCollection.Find(w => w.WorkerAddress == workerAddress).ToListAsync();
-            if (response.Count == 1) 
-            { 
-                return response[0].WorkerPid; 
-            }
-            else 
-            { 
-                return 0; 
-            }
-        }
-
-        public async Task<List<string>> GetAllAvailableWorkers()
-        {
-            var available = new List<string>();
-            var response = await _workerCollection.Find(w => w.Status == "waiting").ToListAsync();
-            foreach (var worker in response)
-            {
-                available.Add(worker.WorkerAddress);
-            }
-            return available;
-        }
-
-        public async Task<FileMetadata> RetrieveFileFromWorkers(string fileName)
-        {
-            var completeFile = new FileMetadata
-            {
-                FileName = fileName,
-                Chunks = new Dictionary<string, string>()
-            };
-            var workers = await _workerCollection
-                .Find(worker => worker.Files.Exists(f => f.FileName == fileName))
-                .ToListAsync();
-
-            foreach (var worker in workers)
-            {
-                var file = worker.Files.Find(f => f.FileName == fileName);
-                if (file != null)
-                {
-                    foreach (var chunk in file.Chunks)
-                    {
-                        completeFile.Chunks[chunk.Key] = chunk.Value;
-                    }
-                }
-            }
-            return completeFile;
-        }
-
-        public async Task<List<string>> RemoveFileFromWorkersAsync(string fileName)
-        {
-            var workersWithFile = await _workerCollection
-                .Find(worker => worker.Files.Any(f => f.FileName == fileName))
-                .ToListAsync();
-
-            if (workersWithFile.Count == 0) { return new List<string>(); }
-            
-            var workerAddressesWithFileRemoved = new List<string>();
-            foreach (var worker in workersWithFile)
-            {
-                var fileMetadata = worker.Files.FirstOrDefault(f => f.FileName == fileName);
-                if (fileMetadata != null)
-                {
-                    worker.Files.Remove(fileMetadata);
-                    
-                    var updateResult = await _workerCollection.ReplaceOneAsync(
-                        w => w.Id == worker.Id, worker);
-                    if (updateResult.ModifiedCount > 0)
-                    {
-                        workerAddressesWithFileRemoved.Add(worker.WorkerAddress);
-                    }
-                }
-            }
-            return workerAddressesWithFileRemoved;
         }
     }
 }

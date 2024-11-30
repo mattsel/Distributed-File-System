@@ -13,7 +13,6 @@ namespace DistributedFileSystem.MasterNode.Models
         [BsonId]
         public ObjectId Id { get; set; }
         public string WorkerAddress { get; set; } = string.Empty;
-        public int WorkerPid { get; set; } = 0;
         public string Status { get; set; } = string.Empty;
         public float DiskSpace { get; set; }
         public float CpuUsage { get; set; }

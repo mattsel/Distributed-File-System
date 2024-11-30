@@ -25,16 +25,13 @@ fi
 
 add_scrape_config() {
     local address="$1"
-    address="${address//https:\/\//}"
-    local scrapeConfig="
-  - job_name: 'scrape_$address'
+    local scrapeConfig="  - job_name: 'scrape_$address'
     scrape_interval: 15s
     scheme: https
     static_configs:
       - targets: ['$address']
     tls_config:
-      insecure_skip_verify: true
-"
+      insecure_skip_verify: true"
 
     if grep -q "scrape_$address" "$configFilePath"; then
         echo "Scrape config for address '$address' already exists in the configuration file."

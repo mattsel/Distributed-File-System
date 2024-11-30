@@ -1,15 +1,11 @@
 using DistributedFileSystem.MasterNode;
 using Grpc.Core;
 using Grpc.Net.Client;
-using Google.Protobuf;
 using DistributedFileSystem.MasterNode.Services;
 using DistributedFileSystem.WorkerNode;
 using System.Diagnostics;
 using DistributedFileSystem.MasterNode.Models;
 using System.Runtime.InteropServices;
-using System.Net.Sockets;
-using System.Net;
-using System.Security.Cryptography;
 
 // <summary>
 // This class acts as the translator for gRPC calls to the master node. Many interactions with the master node will require the master node to interact with
@@ -35,10 +31,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         _logger.LogInformation("Responding to CreateNode call.");
         _metrics.GrpcCallsCounter.WithLabels("CreateNode").Inc();
         var timer = Stopwatch.StartNew();
-        string port = request.WorkerAddress.ToString().Split(":")[2];
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { RunProcess("powershell", port, "..\\..\\..\\scripts\\createWorker.ps1"); }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { RunProcess("bash", port, "..\\..\\..\\scripts\\createWorker.sh"); }
-        else { _logger.LogError("Unable to add scrape target"); }
+
         var channel = GrpcChannel.ForAddress(request.WorkerAddress);
         var client = new WorkerNode.WorkerNodeClient(channel);
         var resourceRequest = new ResourceUsageRequest();
@@ -70,8 +63,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
             if (updateResourceResult)
             {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { RunProcess("powershell", $"https://localhost:{port}", "CreateNode", "..\\..\\..\\scripts\\scrape.ps1"); }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { RunProcess("bash", $"https://localhost:{port}", "CreateNode", "..\\..\\..\\scripts\\scrape.sh"); }
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { AddScrape("powershell", request.WorkerAddress.ToString(), "CreateNode"); }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { AddScrape("bash", request.WorkerAddress.ToString(), "CreateNode"); }
                 else { _logger.LogError("Unable to add scrape target"); }
                 _logger.LogInformation("Successfully updated worker metadata with resource usage.");
                 _metrics.RequestDuration.WithLabels("CreateNode").Observe(timer.Elapsed.TotalSeconds);
@@ -94,23 +87,18 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         }
     }
 
-    // When called it will delete the worker node from the database so it is no longer an active worker. Requires a https string to remove a node
+    // When called it will delete the worker node from the database so it is no longer an active worker. Requries a https string to remove a node
     public override async Task<DeleteNodeResponse> DeleteNode(DeleteNodeRequest request, ServerCallContext context)
     {
         _logger.LogInformation("Responding to DeleteNode call");
         _metrics.GrpcCallsCounter.WithLabels("DeleteNode").Inc();
         var timer = Stopwatch.StartNew();
-        int workerPid = await _mongoDbService.GetWorkerPid(request.WorkerAddress);
-        Process process = Process.GetProcessById(workerPid);
-        process.Kill();
-        Console.WriteLine($"Process with PID {workerPid} has been terminated.");
-
         bool response = await _mongoDbService.DeleteNode(request.WorkerAddress);
         if (response)
         {
             _logger.LogInformation("Successfully deleted node");
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { RunProcess("powershell", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.ps1"); }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { RunProcess("bash", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.sh"); }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { AddScrape("powershell", request.WorkerAddress.ToString(), "DeleteNode"); }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { AddScrape("bash", request.WorkerAddress.ToString(), "DeleteNode"); }
             else { _logger.LogError("Unable to remove scrape target"); }
             _metrics.RequestDuration.WithLabels("DeleteNode").Observe(timer.Elapsed.TotalSeconds);
             return new DeleteNodeResponse { Status = true, Message = "Node deleted successfully." };
@@ -125,7 +113,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
     }
 
     // When called will store files using a worker node. This function will use node balancing techniques to ensure minimal latency.
-    public override async Task<SingleStoreResponse> SingleStore(SingleStoreRequest request, ServerCallContext context)
+    public override async Task<HandleFilesResponse> HandleFiles(HandleFilesRequest request, ServerCallContext context)
     {
         _logger.LogInformation("Responding to HandleFiles call");
         _metrics.GrpcCallsCounter.WithLabels("HandleFiles").Inc();
@@ -154,14 +142,14 @@ public class MasterNodeService : MasterNode.MasterNodeBase
                 {
                     _logger.LogInformation("Successfully stored file chunks");
                     _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-                    return new SingleStoreResponse { Status = true, Message = workerResponse.Message };
+                    return new HandleFilesResponse { Status = true, Message = workerResponse.Message };
                 }
                 else
                 {
                     _logger.LogError("Failed to update MongoDB with worker's new metadata");
                     _metrics.ErrorCount.WithLabels("HandleFiles").Inc();
                     _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-                    return new SingleStoreResponse { Status = false, Message = "Failed to update MongoDB." };
+                    return new HandleFilesResponse { Status = false, Message = "Failed to update MongoDB." };
                 }
             }
             else
@@ -169,7 +157,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
                 _logger.LogError("Failed to store chunk at worker node.");
                 _metrics.ErrorCount.WithLabels("HandleFiles").Inc();
                 _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-                return new SingleStoreResponse { Status = false, Message = "Failed to store chunk at worker node." };
+                return new HandleFilesResponse { Status = false, Message = "Failed to store chunk at worker node." };
             }
         }
         else
@@ -177,7 +165,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             _logger.LogError("No optimal worker found.");
             _metrics.ErrorCount.WithLabels("HandleFiles").Inc();
             _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-            return new SingleStoreResponse { Status = false, Message = "Failed to find optimal worker to store your files." };
+            return new HandleFilesResponse { Status = false, Message = "Failed to find optimal worker to store your files." };
         }
     }
 
@@ -237,190 +225,27 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             DiskSpace = workerResponse.DiskSpace
         };
     }
-public override async Task<DistributeFileResponse> DistributeFile(DistributeFileRequest request, ServerCallContext context)
-{
-    _logger.LogInformation("Responding to DistributedFile call");
-    _metrics.GrpcCallsCounter.WithLabels("DistributeFile").Inc();
-    var timer = Stopwatch.StartNew();
-
-    try
-    {
-        if (request.FileData == null || request.FileData.Length == 0)
-        {
-            throw new RpcException(new Status(StatusCode.InvalidArgument, "File data cannot be null or empty."));
-        }
-
-        var fileBytes = request.FileData.ToByteArray();
-        int fileSize = fileBytes.Length;
-
-        var availableWorkers = await GetAvailableWorkers();
-        if (availableWorkers.Count == 0)
-        {
-            _logger.LogWarning("No available workers to distribute the file");
-            return new DistributeFileResponse
-            {
-                Status = false,
-                Message = "No available workers to process the file."
-            };
-        }
-
-        _logger.LogInformation($"Found {availableWorkers.Count} available workers");
-
-        var chunks = SplitFileToChunks(fileBytes, availableWorkers.Count);
-        _logger.LogInformation($"File split into {chunks.Count} chunks");
-
-        var tasks = new List<Task>();
-        for (int i = 0; i < chunks.Count; i++)
-        {
-            var worker = availableWorkers[i % availableWorkers.Count];
-            var chunk = chunks[i];
-            var chunkId = Guid.NewGuid().ToString();
-            tasks.Add(DistributeChunkToWorker(worker, chunk, chunkId, request.FileName));
-        }
-
-        await Task.WhenAll(tasks);
-        _logger.LogInformation("Completed distributing all chunks");
-
-        timer.Stop();
-        _metrics.RequestDuration.WithLabels("DistributeFile").Observe(timer.Elapsed.TotalSeconds);
-
-        return new DistributeFileResponse
-        {
-            Status = true,
-            Message = "File distributed successfully"
-        };
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Error during file distribution");
-        return new DistributeFileResponse
-        {
-            Status = false,
-            Message = $"Error during file distribution: {ex.Message}"
-        };
-    }
-}
-public override async Task<RetrieveFileResponse> RetrieveFile(RetrieveFileRequest request, ServerCallContext context)
-{
-    try
-    {
-        var fileMetadata = await _mongoDbService.RetrieveFileFromWorkers(request.FileName);
-
-        if (fileMetadata.Chunks.Count == 0)
-        {
-            return new RetrieveFileResponse
-            {
-                Status = false,
-                Message = "No chunks found for the requested file."
-            };
-        }
-
-        var chunksList = new List<FileChunk>();
-        foreach (var chunk in fileMetadata.Chunks)
-        {
-            chunksList.Add(new FileChunk
-            {
-                ChunkId = chunk.Key,
-                WorkerId = chunk.Value
-            });
-        }
-
-        return new RetrieveFileResponse
-        {
-            Status = true,
-            Message = "File retrieved successfully",
-            FileName = fileMetadata.FileName,
-            FileData = { chunksList }
-        };
-    }
-    catch (Exception ex)
-    {
-        // Log and handle exceptions
-        _logger.LogError(ex, "Error retrieving file.");
-        return new RetrieveFileResponse
-        {
-            Status = false,
-            Message = $"Error retrieving file: {ex.Message}"
-        };
-    }
-}
-
-public override async Task<DeleteFileResponse> DeleteFile(DeleteFileRequest request, ServerCallContext context)
-{
-    var workersWithFiles = await _mongoDbService.RemoveFileFromWorkersAsync(request.FileName);
-    
-}
-
-private List<byte[]> SplitFileToChunks(byte[] fileBytes, int chunkSize)
-{
-    var chunks = new List<byte[]>();
-    for (int i = 0; i < fileBytes.Length; i += chunkSize)
-    {
-        int size = Math.Min(chunkSize, fileBytes.Length - i);
-        var chunk = new byte[size];
-        Array.Copy(fileBytes, i, chunk, 0, size);
-        chunks.Add(chunk);
-    }
-    return chunks;
-}
-
-private async Task<List<string>> GetAvailableWorkers()
-{
-    var availableWorkers = await _mongoDbService.GetAllAvailableWorkers();
-    return availableWorkers;
-}
-
-private async Task DistributeChunkToWorker(string worker, byte[] chunk, string chunkId, string fileName)
-{
-    try
-    {
-        var channel = GrpcChannel.ForAddress(worker);
-        var client = new WorkerNode.WorkerNodeClient(channel);
-
-        await _mongoDbService.UpdateWorkerStatus(worker, "working", fileName, chunkId);
-
-        var workerRequest = new StoreChunkRequest { ChunkId = chunkId, ChunkData = ByteString.CopyFrom(chunk) };
-        var workerResponse = await client.StoreChunkAsync(workerRequest);
-
-        if (workerResponse.Status)
-        {
-            _logger.LogInformation($"Chunk {chunkId} stored successfully at worker {worker}");
-
-            var resourceRequest = new ResourceUsageRequest { WorkerAddress = worker };
-            var resourceResponse = await client.ResourceUsageAsync(resourceRequest);
-
-            await _mongoDbService.UpdateWorkerMetadata(
-                worker,
-                "waiting",
-                resourceResponse.CpuUsage,
-                resourceResponse.MemoryUsage,
-                resourceResponse.DiskSpace
-            );
-        }
-        else { _logger.LogError($"Failed to store chunk {chunkId} on worker {worker}"); }
-    }
-    catch (Exception ex) { _logger.LogError(ex, $"Error distributing chunk {chunkId} to worker {worker}"); }
-}
-
-
-    private async void RunProcess(string language, string address, string path, string action="")
+    private void AddScrape(string language, string address, string action)
     {
         try
         {
-            string args;
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            string absoluteScriptPath = Path.GetFullPath(Path.Combine(baseDirectory, path));
-
-            if (action == "CreateNode" || action == "DeleteNode")
+            string scriptPath;
+            string absoluteScriptPath;
+            string args;
+            if (language == "powershell")
             {
-                if (language == "powershell") { args = $"{absoluteScriptPath} -address {address} -action {action}"; }
-                else { args = $"{absoluteScriptPath} {address} {action}"; } 
+                scriptPath = "..\\..\\..\\scripts\\update.ps1";
+                absoluteScriptPath = Path.GetFullPath(Path.Combine(baseDirectory, scriptPath));
+                args = $"{absoluteScriptPath} -address {address} -action {action}";
             }
             else
             {
-                args = $"{absoluteScriptPath} {address}";
+                scriptPath = "..\\..\\..\\scripts\\update.sh";
+                absoluteScriptPath = Path.GetFullPath(Path.Combine(baseDirectory, scriptPath));
+                args = $"{absoluteScriptPath} {address} {action}";
             }
-
+            
             _logger.LogInformation($"Base directory: {baseDirectory}");
             _logger.LogInformation($"Script path: {absoluteScriptPath}");
             _logger.LogInformation($"Absolute script path: {absoluteScriptPath}");
@@ -430,7 +255,7 @@ private async Task DistributeChunkToWorker(string worker, byte[] chunk, string c
             var processStartInfo = new ProcessStartInfo
             {
                 FileName = language,
-                Arguments = args,
+                Arguments = $"{absoluteScriptPath} -address {address} -action {action}",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -438,12 +263,6 @@ private async Task DistributeChunkToWorker(string worker, byte[] chunk, string c
             };
             using var process = new Process { StartInfo = processStartInfo };
             process.Start();
-
-            if (action == "") 
-            { 
-                int pid = process.Id; 
-                await _mongoDbService.SetWorkerPid(address, pid);
-            }
             string output = process.StandardOutput.ReadToEnd();
             string errors = process.StandardError.ReadToEnd();
 
@@ -453,5 +272,4 @@ private async Task DistributeChunkToWorker(string worker, byte[] chunk, string c
         }
         catch (Exception ex) { _logger.LogError($"Failed to add scrape: {ex}"); }
     }
-    
 }
