@@ -8,7 +8,7 @@ using Prometheus;
 // and worker nodes available in the network.
 // </summary>
 
-namespace DistributedFileSystem.MasterNode.Services
+namespace DistributedFileSystem.MasterNode.Helpers
 {
     public class MongoDbService
     {
@@ -205,13 +205,13 @@ namespace DistributedFileSystem.MasterNode.Services
         public async Task<int> GetWorkerPid(string workerAddress)
         {
             var response = await _workerCollection.Find(w => w.WorkerAddress == workerAddress).ToListAsync();
-            if (response.Count == 1) 
-            { 
-                return response[0].WorkerPid; 
+            if (response.Count == 1)
+            {
+                return response[0].WorkerPid;
             }
-            else 
-            { 
-                return 0; 
+            else
+            {
+                return 0;
             }
         }
 
@@ -252,8 +252,8 @@ namespace DistributedFileSystem.MasterNode.Services
             return workerChunksList;
         }
 
-    // Gets the chunkId given a filename to later make an rpc call to get a chunk from worker node
-    public async Task<List<string>> GetChunkIdsForFile(string fileName)
+        // Gets the chunkId given a filename to later make an rpc call to get a chunk from worker node
+        public async Task<List<string>> GetChunkIdsForFile(string fileName)
         {
             var workersWithFile = await _workerCollection
                 .Find(worker => worker.Files.Any(f => f.FileName == fileName))

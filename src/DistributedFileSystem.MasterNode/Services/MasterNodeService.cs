@@ -2,14 +2,11 @@ using DistributedFileSystem.MasterNode;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Google.Protobuf;
-using DistributedFileSystem.MasterNode.Services;
 using DistributedFileSystem.WorkerNode;
 using System.Diagnostics;
 using DistributedFileSystem.MasterNode.Models;
 using System.Runtime.InteropServices;
-using System.Net.Sockets;
-using System.Net;
-using System.Security.Cryptography;
+using DistributedFileSystem.MasterNode.Helpers;
 
 // <summary>
 // This class acts as the translator for gRPC calls to the master node. Many interactions with the master node will require the master node to interact with
@@ -21,12 +18,14 @@ public class MasterNodeService : MasterNode.MasterNodeBase
     private readonly MongoDbService _mongoDbService;
     private readonly ILogger<MasterNodeService> _logger;
     private readonly MetricsCollector _metrics;
+    private readonly HelperFunctions _helper;
 
-    public MasterNodeService(MongoDbService mongoDbService, ILogger<MasterNodeService> logger, MetricsCollector metrics)
+    public MasterNodeService(MongoDbService mongoDbService, ILogger<MasterNodeService> logger, MetricsCollector metrics, HelperFunctions helper)
     {
         _mongoDbService = mongoDbService;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
+        _helper = helper;
     }
 
     // When called will create a new worker node document in MongoDB to be used. Requires a https address to register a worker
@@ -35,8 +34,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         _logger.LogInformation("Responding to CreateNode call.");
         _metrics.GrpcCallsCounter.WithLabels("CreateNode").Inc();
         var timer = Stopwatch.StartNew();
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await RunProcess("powershell", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\createWorker.ps1"); }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await RunProcess("bash", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\createWorker.sh"); }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await _helper.RunProcess("powershell", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\createWorker.ps1"); }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await _helper.RunProcess("bash", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\createWorker.sh"); }
         else { _logger.LogError("Unable to add start worker node"); }
         var channel = GrpcChannel.ForAddress(request.WorkerAddress);
         var client = new WorkerNode.WorkerNodeClient(channel);
@@ -65,8 +64,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
         if (updateResourceResult)
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await RunProcess("powershell", request.WorkerAddress.ToString(), "CreateNode", "..\\..\\..\\scripts\\scrape.ps1"); }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await RunProcess("bash", request.WorkerAddress.ToString(), "CreateNode", "..\\..\\..\\scripts\\scrape.sh"); }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await _helper.RunProcess("powershell", request.WorkerAddress.ToString(), "CreateNode", "..\\..\\..\\scripts\\scrape.ps1"); }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await _helper.RunProcess("bash", request.WorkerAddress.ToString(), "CreateNode", "..\\..\\..\\scripts\\scrape.sh"); }
             else { _logger.LogError("Unable to add scrape target"); }
             _logger.LogInformation("Successfully updated worker metadata with resource usage.");
             _metrics.RequestDuration.WithLabels("CreateNode").Observe(timer.Elapsed.TotalSeconds);
@@ -103,8 +102,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         if (response)
         {
             _logger.LogInformation("Successfully deleted node");
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await RunProcess("powershell", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.ps1"); }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await RunProcess("bash", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.sh"); }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await _helper.RunProcess("powershell", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.ps1"); }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await _helper.RunProcess("bash", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.sh"); }
             else { _logger.LogError("Unable to remove scrape target"); }
             _metrics.RequestDuration.WithLabels("DeleteNode").Observe(timer.Elapsed.TotalSeconds);
             return new DeleteNodeResponse { Status = true, Message = "Node deleted successfully." };
@@ -249,7 +248,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             var fileBytes = request.FileData.ToByteArray();
             int fileSize = fileBytes.Length;
 
-            var availableWorkers = await GetAvailableWorkers();
+            var availableWorkers = await _helper.GetAvailableWorkers();
             if (availableWorkers.Count == 0)
             {
                 _logger.LogWarning("No available workers to distribute the file");
@@ -262,7 +261,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
             _logger.LogInformation($"Found {availableWorkers.Count} available workers");
 
-            var chunks = SplitFileToChunks(fileBytes, availableWorkers.Count);
+            var chunks = _helper.SplitFileToChunks(fileBytes, availableWorkers.Count);
             _logger.LogInformation($"File split into {chunks.Count} chunks");
 
             var tasks = new List<Task>();
@@ -369,7 +368,6 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         }
     }
 
-
     // Deletes files from workers by giving a file name
     public override async Task<DeleteFileResponse> DeleteFile(DeleteFileRequest request, ServerCallContext context)
     {
@@ -412,7 +410,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
                 foreach (var chunkId in chunkIds)
                 {
                     var deleteChunkRequest = new DeleteChunkRequest { ChunkId = chunkId };
-                    var deleteChunkResponse = await client.DeleteChunkAsync(deleteChunkRequest);
+                    var deleteChunkResponse = client.DeleteChunk(deleteChunkRequest);
                     if (deleteChunkResponse.Status)
                     {
                         chunkDeletionResults.Add($"Successfully deleted chunk {chunkId} from worker {workerAddress}");
@@ -438,11 +436,6 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             Message = $"File {request.FileName} deletion results:\n{deletionMessage}"
         };
     }
-
-    // THE FOLLOWING ARE HELPER FUNCTIONS
-    // EVENTUALLY WILL BE MOVED TO A HELPER CLASS
-
-    // Distributes byte data to workers
     private async Task DistributeChunkToWorker(string worker, byte[] chunk, string chunkId, string fileName)
     {
         var timer = Stopwatch.StartNew();
@@ -454,7 +447,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             await _mongoDbService.UpdateWorkerStatus(worker, "working", fileName, chunkId);
 
             var workerRequest = new StoreChunkRequest { ChunkId = chunkId, ChunkData = ByteString.CopyFrom(chunk) };
-            var workerResponse = await client.StoreChunkAsync(workerRequest);
+            var workerResponse = client.StoreChunk(workerRequest);
 
             if (workerResponse.Status)
             {
@@ -474,85 +467,9 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             else { _logger.LogError($"Failed to store chunk {chunkId} on worker {worker}"); }
             _metrics.RequestDuration.WithLabels("DistributeChunkToWorker").Observe(timer.Elapsed.TotalSeconds);
         }
-        catch (Exception ex) 
-        { 
+        catch (Exception ex)
+        {
             _logger.LogError(ex, $"Error distributing chunk {chunkId} to worker {worker}");
         }
     }
-
-    // General function to allow running processes such as adding/deleteing scrape targets or running/deleting worker nodes
-    private async Task RunProcess(string language, string address, string path, string action="")
-    {
-        try
-        {
-            string args;
-            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            string absoluteScriptPath = Path.GetFullPath(Path.Combine(baseDirectory, path));
-
-            if (action == "CreateNode" || action == "DeleteNode")
-            {
-                if (language == "powershell") { args = $"{absoluteScriptPath} -address {address} -action {action}"; }
-                else { args = $"{absoluteScriptPath} {address} {action}"; } 
-            }
-            else
-            {
-                string port = address.ToString().Split(":")[2];
-                args = $"{absoluteScriptPath} {port}";
-            }
-
-            _logger.LogInformation($"Base directory: {baseDirectory}");
-            _logger.LogInformation($"Script path: {absoluteScriptPath}");
-            _logger.LogInformation($"Absolute script path: {absoluteScriptPath}");
-            _logger.LogInformation(args);
-
-            if (!File.Exists(absoluteScriptPath)) { _logger.LogError("Script file not found at: " + absoluteScriptPath); return; }
-            var processStartInfo = new ProcessStartInfo
-            {
-                FileName = language,
-                Arguments = args,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var process = new Process { StartInfo = processStartInfo };
-            process.Start();
-
-            if (action == "") 
-            {
-                await _mongoDbService.CreateNode(address);
-                int pid = process.Id;
-                await _mongoDbService.SetWorkerPid(address, pid);
-            }
-            string output = process.StandardOutput.ReadToEnd();
-            string errors = process.StandardError.ReadToEnd();
-
-            if (!string.IsNullOrEmpty(output)) { _logger.LogInformation(output); }
-            if (!string.IsNullOrEmpty(errors)) { _logger.LogError(errors); }
-            process.WaitForExit();
-        }
-        catch (Exception ex) { _logger.LogError($"Failed to add scrape: {ex}"); }
-    }
-
-    // Splits file to chunks based on available workers and chunk size for accuracy
-    private List<byte[]> SplitFileToChunks(byte[] fileBytes, int chunkSize)
-    {
-        var chunks = new List<byte[]>();
-        for (int i = 0; i < fileBytes.Length; i += chunkSize)
-        {
-            int size = Math.Min(chunkSize, fileBytes.Length - i);
-            var chunk = new byte[size];
-            Array.Copy(fileBytes, i, chunk, 0, size);
-            chunks.Add(chunk);
-        }
-        return chunks;
-    }
-
-    // Function will retrieve any worker that is not in working status
-    private async Task<List<string>> GetAvailableWorkers()
-    {
-        var availableWorkers = await _mongoDbService.GetAllAvailableWorkers();
-        return availableWorkers;
-    }
-
 }

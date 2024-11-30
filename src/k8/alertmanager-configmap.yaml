@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: default
+  labels:
+    app: alertmanager
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+
+    route:
+      group_by: ['alertname']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 3h
+      receiver: 'email-receiver'
+
+    receivers:
+      - name: 'email-receiver'
+        email_configs:
+          - to: '${SMTP_TO}'
+            from: '${SMTP_FROM}'
+            smarthost: '${SMTP_SMARTHOST}'
+            auth_username: '${SMTP_USERNAME}'
+            auth_password: '${SMTP_PASSWORD}'
+            send_resolved: true
