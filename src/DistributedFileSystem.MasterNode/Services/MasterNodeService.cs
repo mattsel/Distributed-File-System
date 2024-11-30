@@ -304,11 +304,13 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         _logger.LogInformation("Responding to RetrieveFile call");
         _metrics.GrpcCallsCounter.WithLabels("RetrieveFile").Inc();
         var timer = Stopwatch.StartNew();
+
         try
         {
-            var fileMetadata = await _mongoDbService.RetrieveFileFromWorkers(request.FileName);
+            // Call the MongoDB service to retrieve file metadata and chunk information
+            var workerChunksWithData = await _mongoDbService.RetrieveFileFromWorkers(request.FileName);
 
-            if (fileMetadata.Chunks.Count == 0)
+            if (workerChunksWithData.Count == 0)
             {
                 timer.Stop();
                 _metrics.RequestDuration.WithLabels("RetrieveFile").Observe(timer.Elapsed.TotalSeconds);
@@ -319,32 +321,46 @@ public class MasterNodeService : MasterNode.MasterNodeBase
                 };
             }
 
-            var chunksList = new List<FileChunk>();
-            foreach (var chunk in fileMetadata.Chunks)
+            var chunksList = new List<ByteString>();
+
+            foreach (var worker in workerChunksWithData)
             {
-                chunksList.Add(new FileChunk
+                string workerAddress = worker.Key;
+                var chunkDataList = worker.Value;
+
+                var channel = GrpcChannel.ForAddress(workerAddress);
+                var client = new WorkerNode.WorkerNodeClient(channel);
+
+                foreach (var chunk in chunkDataList)
                 {
-                    ChunkId = chunk.Key,
-                    WorkerId = chunk.Value
-                });
+                    var chunkRequest = new GetChunkRequest { ChunkId = chunk };
+                    var response = await client.GetChunkAsync(chunkRequest);
+
+                    if (response?.ChunkData != null)
+                    {
+                        chunksList.Add(response.ChunkData);
+                    }
+                }
             }
+
             timer.Stop();
             _metrics.RequestDuration.WithLabels("RetrieveFile").Observe(timer.Elapsed.TotalSeconds);
+
             return new RetrieveFileResponse
             {
                 Status = true,
                 Message = "File retrieved successfully",
-                FileName = fileMetadata.FileName,
+                FileName = request.FileName,
                 FileData = { chunksList }
             };
         }
         catch (Exception ex)
         {
-            
             _logger.LogError(ex, "Error retrieving file.");
             timer.Stop();
             _metrics.ErrorCount.WithLabels("RetrieveFile").Inc();
             _metrics.RequestDuration.WithLabels("RetrieveFile").Observe(timer.Elapsed.TotalSeconds);
+
             return new RetrieveFileResponse
             {
                 Status = false,
@@ -352,6 +368,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             };
         }
     }
+
 
     // Deletes files from workers by giving a file name
     public override async Task<DeleteFileResponse> DeleteFile(DeleteFileRequest request, ServerCallContext context)

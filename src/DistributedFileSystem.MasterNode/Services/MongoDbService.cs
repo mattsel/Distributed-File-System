@@ -81,10 +81,6 @@ namespace DistributedFileSystem.MasterNode.Services
         public async Task<bool> UpdateWorkerStatus(string workerAddress, string status, string fileName, string chunkId)
         {
 
-            var filter = Builders<WorkerMetadata>.Filter.ElemMatch(w => w.Files, f => f.FileName == fileName);
-            var workers = await _workerCollection.Find(filter).ToListAsync();
-
-
             _logger.LogInformation("Beginning to update worker's status");
             var filter = Builders<WorkerMetadata>.Filter.Eq(w => w.WorkerAddress, workerAddress);
             var update = Builders<WorkerMetadata>.Update.Combine(
@@ -171,6 +167,8 @@ namespace DistributedFileSystem.MasterNode.Services
             _logger.LogInformation($"Optimal worker found: {optimalWorker.WorkerAddress} (CPU: {optimalWorker.CpuUsage}%, Memory: {optimalWorker.MemoryUsage}%, Disk: {optimalWorker.DiskSpace}MB)");
             return optimalWorker.WorkerAddress;
         }
+
+        // This function will set a pid to the workers metadata to later be retrieved to kill processes of a worker node
         public async Task<bool> SetWorkerPid(string workerAddress, int pid)
         {
             _logger.LogInformation($"Setting pid ({pid}) to worker at the address: {workerAddress} .");
@@ -203,6 +201,7 @@ namespace DistributedFileSystem.MasterNode.Services
             }
         }
 
+        // Function called to get a workers pid
         public async Task<int> GetWorkerPid(string workerAddress)
         {
             var response = await _workerCollection.Find(w => w.WorkerAddress == workerAddress).ToListAsync();
@@ -216,6 +215,7 @@ namespace DistributedFileSystem.MasterNode.Services
             }
         }
 
+        // Returns a list of all worker addresses that are currently waiting
         public async Task<List<string>> GetAllAvailableWorkers()
         {
             var available = new List<string>();
@@ -227,13 +227,10 @@ namespace DistributedFileSystem.MasterNode.Services
             return available;
         }
 
-        public async Task<FileMetadata> RetrieveFileFromWorkers(string fileName)
+        // This will retrieve the file from all workers that contain the filename
+        public async Task<List<KeyValuePair<string, List<string>>>> RetrieveFileFromWorkers(string fileName)
         {
-            var completeFile = new FileMetadata
-            {
-                FileName = fileName,
-                Chunks = new Dictionary<string, string>()
-            };
+            var workerChunksList = new List<KeyValuePair<string, List<string>>>();
             var workers = await _workerCollection
                 .Find(worker => worker.Files.Exists(f => f.FileName == fileName))
                 .ToListAsync();
@@ -241,18 +238,22 @@ namespace DistributedFileSystem.MasterNode.Services
             foreach (var worker in workers)
             {
                 var file = worker.Files.Find(f => f.FileName == fileName);
+
                 if (file != null)
                 {
+                    var chunkIds = new List<string>();
                     foreach (var chunk in file.Chunks)
                     {
-                        completeFile.Chunks[chunk.Key] = chunk.Value;
+                        chunkIds.Add(chunk.Key);
                     }
+                    workerChunksList.Add(new KeyValuePair<string, List<string>>(worker.WorkerAddress, chunkIds));
                 }
             }
-            return completeFile;
+            return workerChunksList;
         }
 
-        public async Task<List<string>> GetChunkIdsForFile(string fileName)
+    // Gets the chunkId given a filename to later make an rpc call to get a chunk from worker node
+    public async Task<List<string>> GetChunkIdsForFile(string fileName)
         {
             var workersWithFile = await _workerCollection
                 .Find(worker => worker.Files.Any(f => f.FileName == fileName))
@@ -275,28 +276,34 @@ namespace DistributedFileSystem.MasterNode.Services
             return chunkIds;
         }
 
+        // This will remove all instances of a filename from workers that contain this file
         public async Task<List<string>> RemoveFileFromWorkers(string fileName)
         {
             var workersWithFile = await _workerCollection
                 .Find(worker => worker.Files.Any(f => f.FileName == fileName))
                 .ToListAsync();
 
-            if (workersWithFile.Count > 0) { return new List<string>(); }
-            
+            if (workersWithFile.Count == 0)
+            {
+                return new List<string>();
+            }
+
             var workerAddressesWithFileRemoved = new List<string>();
             foreach (var worker in workersWithFile)
             {
-                var fileMetadata = worker.Files.FirstOrDefault(f => f.FileName == fileName);
-                if (fileMetadata != null)
+                var updateDefinition = Builders<WorkerMetadata>.Update.PullFilter(
+                    w => w.Files,
+                    f => f.FileName == fileName
+                );
+
+                var updateResult = await _workerCollection.UpdateOneAsync(
+                    w => w.Id == worker.Id,
+                    updateDefinition
+                );
+
+                if (updateResult.ModifiedCount > 0)
                 {
-                    worker.Files.Remove(fileMetadata);
-                    
-                    var updateResult = await _workerCollection.ReplaceOneAsync(
-                        w => w.Id == worker.Id, worker);
-                    if (updateResult.ModifiedCount > 0)
-                    {
-                        workerAddressesWithFileRemoved.Add(worker.WorkerAddress);
-                    }
+                    workerAddressesWithFileRemoved.Add(worker.WorkerAddress);
                 }
             }
             return workerAddressesWithFileRemoved;
