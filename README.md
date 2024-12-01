@@ -1,13 +1,13 @@
 # Distributed File System
 
-- [Architecture](#architecture)
-- [Client Node](#client-node)
+- [Architecture](#architecture)📐
+- [Client Node](#client-node)👨‍💼
   - [Functionality](#functionality)
-- [Master Node](#master-node)
+- [Master Node](#master-node)👑
   - [RPC Methods](#rpc-methods)
-- [Worker Node](#worker-node)
+- [Worker Node](#worker-node)👨‍🌾
   - [RPC Methods](#rpc-methods)
-- [Prometheus](#prometheus)
+- [Prometheus](#prometheus)📈
   - [Alertmanager](#alertmanager)
   - [Grafana](#grafana)
 
