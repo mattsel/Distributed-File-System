@@ -33,10 +33,10 @@ class Program
             return Results.Ok(response.Message);
         });
 
-        app.MapGet("/SingleStore", async (MasterNode.MasterNodeClient client) =>
+        app.MapGet("/HandleFiles", async (MasterNode.MasterNodeClient client) =>
         {
             var chunkData = new byte[] { 0x01, 0x02, 0x03 };
-            var response = client.SingleStore(new SingleStoreRequest
+            var response = await client.HandleFilesAsync(new HandleFilesRequest
             {
                 FileName = "example.txt",
                 ChunkData = Google.Protobuf.ByteString.CopyFrom(chunkData),

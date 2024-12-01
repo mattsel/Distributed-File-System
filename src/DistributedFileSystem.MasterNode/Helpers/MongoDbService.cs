@@ -137,7 +137,7 @@ namespace DistributedFileSystem.MasterNode.Helpers
         }
 
         // This uses worker's resources and status to help choose a worker that can handle the request with the least amount of latency possible
-        public async Task<string?> GetOptimalWorker(long chunkSize)
+        public async Task<string?> GetOptimalWorker(int chunkSize)
         {
             _logger.LogInformation("Fetching most optimal worker with status 'waiting' and sufficient disk space.");
 

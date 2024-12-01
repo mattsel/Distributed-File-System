@@ -118,7 +118,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
     }
 
     // When called will store files using a worker node. This function will use node balancing techniques to ensure minimal latency.
-    public override async Task<SingleStoreResponse> SingleStore(SingleStoreRequest request, ServerCallContext context)
+    public override async Task<HandleFilesResponse> HandleFiles(HandleFilesRequest request, ServerCallContext context)
     {
         _logger.LogInformation("Responding to HandleFiles call");
         _metrics.GrpcCallsCounter.WithLabels("HandleFiles").Inc();
@@ -147,14 +147,14 @@ public class MasterNodeService : MasterNode.MasterNodeBase
                 {
                     _logger.LogInformation("Successfully stored file chunks");
                     _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-                    return new SingleStoreResponse { Status = true, Message = workerResponse.Message };
+                    return new HandleFilesResponse { Status = true, Message = workerResponse.Message };
                 }
                 else
                 {
                     _logger.LogError("Failed to update MongoDB with worker's new metadata");
                     _metrics.ErrorCount.WithLabels("HandleFiles").Inc();
                     _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-                    return new SingleStoreResponse { Status = false, Message = "Failed to update MongoDB." };
+                    return new HandleFilesResponse { Status = false, Message = "Failed to update MongoDB." };
                 }
             }
             else
@@ -162,7 +162,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
                 _logger.LogError("Failed to store chunk at worker node.");
                 _metrics.ErrorCount.WithLabels("HandleFiles").Inc();
                 _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-                return new SingleStoreResponse { Status = false, Message = "Failed to store chunk at worker node." };
+                return new HandleFilesResponse { Status = false, Message = "Failed to store chunk at worker node." };
             }
         }
         else
@@ -170,7 +170,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             _logger.LogError("No optimal worker found.");
             _metrics.ErrorCount.WithLabels("HandleFiles").Inc();
             _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-            return new SingleStoreResponse { Status = false, Message = "Failed to find optimal worker to store your files." };
+            return new HandleFilesResponse { Status = false, Message = "Failed to find optimal worker to store your files." };
         }
     }
 
