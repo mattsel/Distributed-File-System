@@ -17,8 +17,7 @@ their data via gRPC. This architecture is developed using C# with both Windows a
 
 ## Architecture
 
-![Screenshot 2024-12-01 133614](https://github.com/user-attachments/assets/e2844ca8-bb4d-40e9-b8b8-1a83202a369b)
-
+![Screenshot 2024-12-01 141458](https://github.com/user-attachments/assets/76906582-e82a-47b8-979b-2c0abad3dbd8)
 
 ## Client Node
 
