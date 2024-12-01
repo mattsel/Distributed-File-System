@@ -1,4 +1,4 @@
-src/k8s/sercrets.yaml
+src/k8/sercrets.yaml
 *appsettings*
 bin/
 obj/
