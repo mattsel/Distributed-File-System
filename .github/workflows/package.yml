@@ -1,0 +1,94 @@
+name: Package Application
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: '8.x'
+
+    - name: Install dependencies
+      run: |
+        dotnet restore
+
+      # Windows
+    - name: Publish Client (Windows)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj -c Release -r win-x64 --self-contained -o ./src/publish/Client
+
+    - name: Publish MasterNode (Windows)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj -c Release -r win-x64 --self-contained -o ./src/publish/Master
+
+    - name: Publish WorkerNode (Windows)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj -c Release -r win-x64 --self-contained -o ./src/publish/Worker
+
+      # Linux
+    - name: Publish Client (Linux)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Client-linux
+
+    - name: Publish MasterNode (Linux)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Master-linux
+
+    - name: Publish WorkerNode (Linux)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Worker-linux
+
+    - name: Prepare application folder
+      run: |
+        mkdir ./output/DFS
+        mkdir ./output/DFS
+
+        # Copy Windows publish output
+        xcopy /E /I /H /Y ./src/publish/Client ./output/DFS/Client
+        xcopy /E /I /H /Y ./src/publish/Master ./output/DFS/Master
+        xcopy /E /I /H /Y ./src/publish/Worker ./output/DFS/Worker
+        xcopy /E /I /H /Y ./src/shared_dependencies ./output/DFS/SharedDependencies
+
+        # Copy Linux publish output
+        xcopy /E /I /H /Y ./src/publish/Client-linux ./output/DFS/Client-linux
+        xcopy /E /I /H /Y ./src/publish/Master-linux ./output/DFS/Master-linux
+        xcopy /E /I /H /Y ./src/publish/Worker-linux ./output/DFS/Worker-linux
+
+        # Copy start/stop scripts for Windows and Linux
+        copy ./src/Scripts/start.bat ./output/DFS/start.bat
+        copy ./src/Scripts/stop.bat ./output/DFS/stop.bat
+        copy ./src/Scripts/start.sh ./output/DFS/start.sh
+        copy ./src/Scripts/stop.sh ./output/DFS/stop.sh
+
+        copy README.txt ./output/DFS/README.txt
+
+    - name: Create ZIP file for Windows
+      if: runner.os == 'Windows'
+      run: |
+        Compress-Archive -Path ./output/DFS/* -DestinationPath ./output/DFS.zip
+
+    - name: Create TAR.GZ file for Linux
+      if: runner.os == 'Linux'
+      run: |
+        tar -czf ./output/DFS.tar.gz -C ./output DFS
+
+    - name: Upload Archive as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: DFS
+        path: |
+          ./output/DFS.zip
+          ./output/DFS.tar.gz
