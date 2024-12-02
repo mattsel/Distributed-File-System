@@ -49,7 +49,7 @@ jobs:
 
         copy ./src/Scripts/start.bat ./releases/DFS/start.bat
         copy ./src/Scripts/stop.bat ./releases/DFS/stop.bat
-        copy README.txt ./releases/DFS/README.txt
+        copy README.md ./releases/DFS/README.md
 
         Compress-Archive -Path ./releases/DFS/* -DestinationPath ./releases/DFS.zip
 
