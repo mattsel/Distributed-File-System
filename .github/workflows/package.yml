@@ -103,7 +103,7 @@ jobs:
 
         cp ./src/Scripts/start.sh ./releases/DFS/start.sh
         cp ./src/Scripts/stop.sh ./releases/DFS/stop.sh
-        cp README.txt ./releases/DFS/README.txt
+        cp README.md ./releases/DFS/README.md
 
         tar -czvf ./releases/DFS.tar.gz -C ./releases DFS
 
