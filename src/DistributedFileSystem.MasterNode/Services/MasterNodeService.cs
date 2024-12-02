@@ -64,8 +64,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
 
         if (updateResourceResult)
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await _helper.RunProcess("powershell", request.WorkerAddress.ToString(), "CreateNode", "..\\..\\..\\scripts\\scrape.ps1"); }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await _helper.RunProcess("bash", request.WorkerAddress.ToString(), "CreateNode", "..\\..\\..\\scripts\\scrape.sh"); }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await _helper.RunProcess("powershell", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\update.ps1", "CreateNode"); }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await _helper.RunProcess("bash", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\update.sh", "CreateNode"); }
             else { _logger.LogError("Unable to add scrape target"); }
             _logger.LogInformation("Successfully updated worker metadata with resource usage.");
             _metrics.RequestDuration.WithLabels("CreateNode").Observe(timer.Elapsed.TotalSeconds);
@@ -102,8 +102,8 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         if (response)
         {
             _logger.LogInformation("Successfully deleted node");
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await _helper.RunProcess("powershell", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.ps1"); }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await _helper.RunProcess("bash", request.WorkerAddress.ToString(), "DeleteNode", "..\\..\\..\\scripts\\scrape.sh"); }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { await _helper.RunProcess("powershell", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\scrape.ps1", "DeleteNode"); }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) { await _helper.RunProcess("bash", request.WorkerAddress.ToString(), "..\\..\\..\\scripts\\scrape.sh", "DeleteNode"); }
             else { _logger.LogError("Unable to remove scrape target"); }
             _metrics.RequestDuration.WithLabels("DeleteNode").Observe(timer.Elapsed.TotalSeconds);
             return new DeleteNodeResponse { Status = true, Message = "Node deleted successfully." };
@@ -118,10 +118,10 @@ public class MasterNodeService : MasterNode.MasterNodeBase
     }
 
     // When called will store files using a worker node. This function will use node balancing techniques to ensure minimal latency.
-    public override async Task<HandleFilesResponse> HandleFiles(HandleFilesRequest request, ServerCallContext context)
+    public override async Task<SingleStoreResponse> SingleStore(SingleStoreRequest request, ServerCallContext context)
     {
-        _logger.LogInformation("Responding to HandleFiles call");
-        _metrics.GrpcCallsCounter.WithLabels("HandleFiles").Inc();
+        _logger.LogInformation("Responding to SingleStore call");
+        _metrics.GrpcCallsCounter.WithLabels("SingleStore").Inc();
         var timer = Stopwatch.StartNew();
         var worker = await _mongoDbService.GetOptimalWorker(request.ChunkSize);
         if (worker != null)
@@ -147,14 +147,14 @@ public class MasterNodeService : MasterNode.MasterNodeBase
                 {
                     _logger.LogInformation("Successfully stored file chunks");
                     _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-                    return new HandleFilesResponse { Status = true, Message = workerResponse.Message };
+                    return new SingleStoreResponse { Status = true, Message = workerResponse.Message };
                 }
                 else
                 {
                     _logger.LogError("Failed to update MongoDB with worker's new metadata");
                     _metrics.ErrorCount.WithLabels("HandleFiles").Inc();
                     _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-                    return new HandleFilesResponse { Status = false, Message = "Failed to update MongoDB." };
+                    return new SingleStoreResponse { Status = false, Message = "Failed to update MongoDB." };
                 }
             }
             else
@@ -162,7 +162,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
                 _logger.LogError("Failed to store chunk at worker node.");
                 _metrics.ErrorCount.WithLabels("HandleFiles").Inc();
                 _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-                return new HandleFilesResponse { Status = false, Message = "Failed to store chunk at worker node." };
+                return new SingleStoreResponse { Status = false, Message = "Failed to store chunk at worker node." };
             }
         }
         else
@@ -170,7 +170,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             _logger.LogError("No optimal worker found.");
             _metrics.ErrorCount.WithLabels("HandleFiles").Inc();
             _metrics.RequestDuration.WithLabels("HandleFiles").Observe(timer.Elapsed.TotalSeconds);
-            return new HandleFilesResponse { Status = false, Message = "Failed to find optimal worker to store your files." };
+            return new SingleStoreResponse { Status = false, Message = "Failed to find optimal worker to store your files." };
         }
     }
 

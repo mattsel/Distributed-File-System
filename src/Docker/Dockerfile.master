@@ -14,20 +14,20 @@ RUN dotnet dev-certs https --export-path /app/localhost.pfx
 
 RUN dotnet restore
 
-RUN dotnet publish DistributedFileSystem.Client/DistributedFileSystem.Client.csproj -c Release -o /app/publish
+RUN dotnet publish DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 
 WORKDIR /app
 
-COPY --from=build /app/publish ./ 
+COPY --from=build /app/publish ./
 COPY --from=build /app/localhost.pfx /etc/ssl/certs/localhost.pfx
 
 RUN chmod 644 /etc/ssl/certs/localhost.pfx
 
-EXPOSE 5000
+EXPOSE 5001
 
 ENV ASPNETCORE_Kestrel__Certificates__Default__Path=/etc/ssl/certs/localhost.pfx
 ENV ASPNETCORE_Kestrel__Certificates__Default__Password=""
 
-ENTRYPOINT ["dotnet", "DistributedFileSystem.Client.dll"]
+ENTRYPOINT ["dotnet", "DistributedFileSystem.MasterNode.dll"]

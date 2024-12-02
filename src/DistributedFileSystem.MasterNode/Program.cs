@@ -18,6 +18,7 @@ class Program
         builder.Services.AddGrpc();
         builder.Services.AddSingleton<MongoDbService>();
         builder.Services.AddSingleton<MetricsCollector>();
+        builder.Services.AddSingleton<HelperFunctions>();
         builder.Services.AddLogging();
 
         var app = builder.Build();

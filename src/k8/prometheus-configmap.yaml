@@ -8,12 +8,12 @@ data:
   prometheus.yml: |
     global:
       scrape_interval: 15s
-    
+
     alerting:
       alertmanagers:
-      - static_configs:
-          - targets:
-            - 'alertmanager:9093'
+        - static_configs:
+            - targets:
+                - 'alertmanager:9093'
 
     scrape_configs:
       - job_name: 'master_node'
@@ -22,10 +22,44 @@ data:
           - targets: ['master-service:5001']
         tls_config:
           insecure_skip_verify: true
-      
+
       - job_name: 'worker_node'
         scheme: https
         static_configs:
           - targets: ['worker-service:5002']
         tls_config:
           insecure_skip_verify: true
+
+    rule_files:
+      - '/etc/prometheus/rules/alert_rules.yml'  # Path to alert rules file
+
+  alert_rules.yml: |
+    groups:
+      - name: worker-nodes
+        rules:
+          - alert: HighCPUUsage
+            expr: worker_node_cpu_usage_percentage > 90  # 90% CPU
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High CPU usage on worker {{ $labels.worker }}"
+              description: "CPU usage on worker {{ $labels.worker }} is above 90% for more than 5 minutes."
+
+          - alert: HighMemoryUsage
+            expr: worker_node_memory_usage_bytes > 8589934592  # 8GB
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage on worker {{ $labels.worker }}"
+              description: "Memory usage on worker {{ $labels.worker }} is above 8GB for more than 5 minutes."
+
+          - alert: LowDiskSpace
+            expr: worker_node_available_disk_space_bytes < 1073741824  # 1GB
+            for: 10m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Low disk space on worker {{ $labels.worker }}"
+              description: "Available disk space on worker {{ $labels.worker }} is below 1GB for more than 10 minutes."

@@ -1,4 +1,11 @@
-# Distributed File System
+```plaintext
+ ____  _     _        _ _           _           _   _____ _ _        ____            _                 
+|  _ \(_)___| |_ _ __(_) |__  _   _| |_ ___  __| | |  ___(_) | ___  / ___| _   _ ___| |_ ___ _ __ ___  
+| | | | / __| __| '__| | '_ \| | | | __/ _ \/ _` | | |_  | | |/ _ \ \___ \| | | / __| __/ _ \ '_ ` _ \ 
+| |_| | \__ \ |_| |  | | |_) | |_| | ||  __/ (_| | |  _| | | |  __/  ___) | |_| \__ \ ||  __/ | | | | |
+|____/|_|___/\__|_|  |_|_.__/ \__,_|\__\___|\__,_| |_|   |_|_|\___| |____/ \__, |___/\__\___|_| |_| |_|
+                                                                           |___/                       
+```
 
 - [Architecture](#architecture)📐
 - [Client Node](#client-node)👨‍💼
@@ -387,6 +394,8 @@ receivers:
 Grafana is important because it allows the consumer to track their Prometheus metrics of a longer period of time.
 Any of the metrics defined in the application be queried by simply adding the Prometheus metrics as a data source.
 The most simple example is to scrape: `https://localhost:9090`.
+
+![Screenshot 2024-12-01 195252](https://github.com/user-attachments/assets/4765477d-c549-4e08-b68b-4a936587e3aa)
 
 Below are the metrics defined in the application that can be queried:
 ```csharp

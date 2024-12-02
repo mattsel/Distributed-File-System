@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  client:
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile.client
+    container_name: client
+    ports:
+      - "5000:5000"
+    networks:
+      - distributed_net
+
+  master:
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile.master
+    container_name: master
+    ports:
+      - "5001:5001"
+    networks:
+      - distributed_net
+
+  worker:
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile.worker
+    container_name: worker
+    ports:
+      - "5002:5002"
+    networks:
+      - distributed_net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./Docker/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./Docker/alert_rules.yml:/etc/prometheus/alert_rules.yml
+    networks:
+      - distributed_net
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./Docker/alertmanager.yml:/etc/alertmanager/config.yml
+    networks:
+      - distributed_net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - distributed_net
+
+networks:
+  distributed_net:
+    driver: bridge
+
+volumes:
+  grafana-storage:

@@ -39,8 +39,6 @@ function Add-ScrapeConfig {
     } else {
         Add-Content -Path $configFilePath -Value $scrapeConfig
         Write-Host "Scrape config for address '$address' has been added to the configuration file."
-        Invoke-RestMethod -Method Post -Uri $address/-/reload
-
     }
 }
 

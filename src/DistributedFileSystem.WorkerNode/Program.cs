@@ -19,6 +19,7 @@ class Program
         app.MapGrpcService<WorkerNodeService>();
         app.UseRouting();
         app.MapMetrics();
-        await app.RunAsync();
+        if (args.Length > 0) { await app.RunAsync($"https://localhost:{args[0]}"); }
+        await app.RunAsync($"https://localhost:5002");
     }
 }

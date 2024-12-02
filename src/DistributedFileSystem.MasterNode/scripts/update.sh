@@ -39,8 +39,6 @@ add_scrape_config() {
         echo "$scrapeConfig" >> "$configFilePath"
         echo "Scrape config for address '$address' has been added to the configuration file."
     fi
-    curl -X POST $address/-/reload
-
 }
 
 remove_scrape_config() {

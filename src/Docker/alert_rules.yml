@@ -11,7 +11,7 @@ groups:
           description: "CPU usage on worker {{ $labels.worker }} is above 90% for more than 5 minutes."
 
       - alert: HighMemoryUsage
-        expr: worker_node_memory_usage_bytes > 8589934592 # 8GB
+        expr: worker_node_memory_usage_bytes > 8589934592 #8GB
         for: 5m
         labels:
           severity: warning

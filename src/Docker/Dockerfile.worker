@@ -1,16 +1,34 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
 WORKDIR /app
 
-COPY ../*.sln ./
-COPY ../DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj ./DistributedFileSystem.WorkerNode/
+COPY DistributedFileSystem.sln ./
+COPY DistributedFileSystem.WorkerNode/ ./DistributedFileSystem.WorkerNode/
+COPY DistributedFileSystem.MasterNode/ ./DistributedFileSystem.MasterNode/
+COPY DistributedFileSystem.Client/ ./DistributedFileSystem.Client/
+
+COPY Protos/ ./Protos/
+
+RUN dotnet dev-certs https --clean
+RUN dotnet dev-certs https
+RUN dotnet dev-certs https --export-path /app/localhost.pfx
 
 RUN dotnet restore
+
 RUN dotnet publish DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+
 WORKDIR /app
 
-COPY --from=build /app/publish /app
+COPY --from=build /app/publish ./
+COPY --from=build /app/localhost.pfx /etc/ssl/certs/localhost.pfx
+
+RUN chmod 644 /etc/ssl/certs/localhost.pfx
+
+EXPOSE 5002
+
+ENV ASPNETCORE_Kestrel__Certificates__Default__Path=/etc/ssl/certs/localhost.pfx
+ENV ASPNETCORE_Kestrel__Certificates__Default__Password=""
 
 ENTRYPOINT ["dotnet", "DistributedFileSystem.WorkerNode.dll"]
-EXPOSE 5002
