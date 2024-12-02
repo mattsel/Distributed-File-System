@@ -9,23 +9,22 @@ on:
       - main
 
 jobs:
-  build:
+  build_windows:
     runs-on: windows-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-    - name: Set up .NET SDK
+    - name: Set up .NET Core SDK (Windows)
       uses: actions/setup-dotnet@v2
       with:
         dotnet-version: '8.x'
 
-    - name: Install dependencies
+    - name: Install dependencies (Windows)
       run: |
-        dotnet restore ./src/DistributedFileSystem.sln
+        dotnet restore
 
-      # Windows
     - name: Publish Client (Windows)
       run: |
         dotnet publish ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj -c Release -r win-x64 --self-contained -o ./src/publish/Client
@@ -38,57 +37,86 @@ jobs:
       run: |
         dotnet publish ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj -c Release -r win-x64 --self-contained -o ./src/publish/Worker
 
-      # Linux
-    - name: Publish Client (Linux)
+    - name: Create ZIP file (Windows)
       run: |
-        dotnet publish ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Client-linux
+        # Clean up any existing DFS directory
+        Remove-Item -Recurse -Force ./releases/DFS
 
-    - name: Publish MasterNode (Linux)
-      run: |
-        dotnet publish ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Master-linux
-
-    - name: Publish WorkerNode (Linux)
-      run: |
-        dotnet publish ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Worker-linux
-
-    - name: Prepare application folder
-      run: |
-        mkdir ./releases/DFS
+        # Recreate the DFS folder and add files
         mkdir ./releases/DFS
 
-        # Copy Windows publish releases
+        # Copy the necessary files (adjust paths as needed)
         xcopy /E /I /H /Y ./src/publish/Client ./releases/DFS/Client
         xcopy /E /I /H /Y ./src/publish/Master ./releases/DFS/Master
         xcopy /E /I /H /Y ./src/publish/Worker ./releases/DFS/Worker
         xcopy /E /I /H /Y ./src/shared_dependencies ./releases/DFS/SharedDependencies
 
-        # Copy Linux publish releases
-        xcopy /E /I /H /Y ./src/publish/Client-linux ./releases/DFS/Client-linux
-        xcopy /E /I /H /Y ./src/publish/Master-linux ./releases/DFS/Master-linux
-        xcopy /E /I /H /Y ./src/publish/Worker-linux ./releases/DFS/Worker-linux
-
-        # Copy start/stop scripts for Windows and Linux
+        # Copy the start/stop scripts and README.txt
         copy ./src/Scripts/start.bat ./releases/DFS/start.bat
         copy ./src/Scripts/stop.bat ./releases/DFS/stop.bat
-        copy ./src/Scripts/start.sh ./releases/DFS/start.sh
-        copy ./src/Scripts/stop.sh ./releases/DFS/stop.sh
-
         copy README.txt ./releases/DFS/README.txt
 
-    - name: Create ZIP file for Windows
-      if: runner.os == 'Windows'
-      run: |
+        # Compress the DFS folder into a ZIP file
         Compress-Archive -Path ./releases/DFS/* -DestinationPath ./releases/DFS.zip
 
-    - name: Create TAR.GZ file for Linux
-      if: runner.os == 'Linux'
-      run: |
-        tar -czf ./releases/DFS.tar.gz -C ./releases DFS
-
-    - name: Upload Archive as artifact
+    - name: Upload ZIP file (Windows)
       uses: actions/upload-artifact@v3
       with:
-        name: DFS
-        path: |
-          ./releases/DFS.zip
-          ./releases/DFS.tar.gz
+        name: DFS-Windows
+        path: ./releases/DFS.zip
+
+  build_linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up .NET Core SDK (Linux)
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: '8.x'
+
+    - name: Install dependencies (Linux)
+      run: |
+        dotnet restore
+
+    - name: Publish Client (Linux)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Client
+
+    - name: Publish MasterNode (Linux)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Master
+
+    - name: Publish WorkerNode (Linux)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Worker
+
+    - name: Create TAR file (Linux)
+      run: |
+        # Clean up any existing DFS directory
+        rm -rf ./releases/DFS
+
+        # Recreate the DFS folder and add files
+        mkdir -p ./releases/DFS
+
+        # Copy the necessary files (adjust paths as needed)
+        cp -r ./src/publish/Client ./releases/DFS/Client
+        cp -r ./src/publish/Master ./releases/DFS/Master
+        cp -r ./src/publish/Worker ./releases/DFS/Worker
+        cp -r ./src/shared_dependencies ./releases/DFS/SharedDependencies
+
+        # Copy the start/stop scripts and README.txt
+        cp ./src/Scripts/start.sh ./releases/DFS/start.sh
+        cp ./src/Scripts/stop.sh ./releases/DFS/stop.sh
+        cp README.txt ./releases/DFS/README.txt
+
+        # Create a TAR.GZ file from the DFS folder
+        tar -czvf ./releases/DFS.tar.gz -C ./releases DFS
+
+    - name: Upload TAR file (Linux)
+      uses: actions/upload-artifact@v3
+      with:
+        name: DFS-Linux
+        path: ./releases/DFS.tar.gz
