@@ -41,16 +41,25 @@ jobs:
 
     - name: Create ZIP file (Windows)
       run: |
-        if (!(Test-Path ./releases/DFS)) { New-Item -Path ./releases/DFS -ItemType Directory }
-        xcopy /E /I /H /Y ./src/publish/Client ./releases/DFS/Client
-        xcopy /E /I /H /Y ./src/publish/Master ./releases/DFS/Master
-        xcopy /E /I /H /Y ./src/publish/Worker ./releases/DFS/Worker
-        xcopy /E /I /H /Y ./src/shared_dependencies ./releases/DFS/SharedDependencies
+        if (!(Test-Path ./releases/DFS)) {
+          Write-Host "Creating ./releases/DFS directory"
+          New-Item -Path ./releases/DFS -ItemType Directory
+        } else {
+          Write-Host "./releases/DFS directory already exists"
+        }
 
-        copy ./src/Scripts/start.bat ./releases/DFS/start.bat
-        copy ./src/Scripts/stop.bat ./releases/DFS/stop.bat
-        copy README.md ./releases/DFS/README.md
+        # Use Copy-Item instead of copy for Windows file copying
+        Write-Host "Copying files into ./releases/DFS..."
+        Copy-Item -Recurse -Force ./src/publish/Client/* ./releases/DFS/Client/
+        Copy-Item -Recurse -Force ./src/publish/Master/* ./releases/DFS/Master/
+        Copy-Item -Recurse -Force ./src/publish/Worker/* ./releases/DFS/Worker/
+        Copy-Item -Recurse -Force ./src/shared_dependencies/* ./releases/DFS/SharedDependencies/
 
+        Copy-Item ./src/Scripts/start.bat ./releases/DFS/start.bat
+        Copy-Item ./src/Scripts/stop.bat ./releases/DFS/stop.bat
+        Copy-Item README.md ./releases/DFS/README.md
+
+        Write-Host "Creating the ZIP file..."
         Compress-Archive -Path ./releases/DFS/* -DestinationPath ./releases/DFS.zip
 
     - name: Upload ZIP file (Windows)
