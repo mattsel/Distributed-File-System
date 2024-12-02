@@ -41,7 +41,7 @@ jobs:
 
     - name: Create ZIP file (Windows)
       run: |
-        mkdir ./releases/DFS
+        if (!(Test-Path ./releases/DFS)) { New-Item -Path ./releases/DFS -ItemType Directory }
         xcopy /E /I /H /Y ./src/publish/Client ./releases/DFS/Client
         xcopy /E /I /H /Y ./src/publish/Master ./releases/DFS/Master
         xcopy /E /I /H /Y ./src/publish/Worker ./releases/DFS/Worker
@@ -93,7 +93,6 @@ jobs:
       run: |
         rm -rf ./releases/DFS
 
-        # Recreate the DFS folder and add files
         mkdir -p ./releases/DFS
 
         cp -r ./src/publish/Client ./releases/DFS/Client
