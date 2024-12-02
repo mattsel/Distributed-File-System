@@ -23,7 +23,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        dotnet restore
+        dotnet restore ./src/DistributedFileSystem.sln
 
       # Windows
     - name: Publish Client (Windows)
@@ -53,42 +53,42 @@ jobs:
 
     - name: Prepare application folder
       run: |
-        mkdir ./output/DFS
-        mkdir ./output/DFS
+        mkdir ./releases/DFS
+        mkdir ./releases/DFS
 
-        # Copy Windows publish output
-        xcopy /E /I /H /Y ./src/publish/Client ./output/DFS/Client
-        xcopy /E /I /H /Y ./src/publish/Master ./output/DFS/Master
-        xcopy /E /I /H /Y ./src/publish/Worker ./output/DFS/Worker
-        xcopy /E /I /H /Y ./src/shared_dependencies ./output/DFS/SharedDependencies
+        # Copy Windows publish releases
+        xcopy /E /I /H /Y ./src/publish/Client ./releases/DFS/Client
+        xcopy /E /I /H /Y ./src/publish/Master ./releases/DFS/Master
+        xcopy /E /I /H /Y ./src/publish/Worker ./releases/DFS/Worker
+        xcopy /E /I /H /Y ./src/shared_dependencies ./releases/DFS/SharedDependencies
 
-        # Copy Linux publish output
-        xcopy /E /I /H /Y ./src/publish/Client-linux ./output/DFS/Client-linux
-        xcopy /E /I /H /Y ./src/publish/Master-linux ./output/DFS/Master-linux
-        xcopy /E /I /H /Y ./src/publish/Worker-linux ./output/DFS/Worker-linux
+        # Copy Linux publish releases
+        xcopy /E /I /H /Y ./src/publish/Client-linux ./releases/DFS/Client-linux
+        xcopy /E /I /H /Y ./src/publish/Master-linux ./releases/DFS/Master-linux
+        xcopy /E /I /H /Y ./src/publish/Worker-linux ./releases/DFS/Worker-linux
 
         # Copy start/stop scripts for Windows and Linux
-        copy ./src/Scripts/start.bat ./output/DFS/start.bat
-        copy ./src/Scripts/stop.bat ./output/DFS/stop.bat
-        copy ./src/Scripts/start.sh ./output/DFS/start.sh
-        copy ./src/Scripts/stop.sh ./output/DFS/stop.sh
+        copy ./src/Scripts/start.bat ./releases/DFS/start.bat
+        copy ./src/Scripts/stop.bat ./releases/DFS/stop.bat
+        copy ./src/Scripts/start.sh ./releases/DFS/start.sh
+        copy ./src/Scripts/stop.sh ./releases/DFS/stop.sh
 
-        copy README.txt ./output/DFS/README.txt
+        copy README.txt ./releases/DFS/README.txt
 
     - name: Create ZIP file for Windows
       if: runner.os == 'Windows'
       run: |
-        Compress-Archive -Path ./output/DFS/* -DestinationPath ./output/DFS.zip
+        Compress-Archive -Path ./releases/DFS/* -DestinationPath ./releases/DFS.zip
 
     - name: Create TAR.GZ file for Linux
       if: runner.os == 'Linux'
       run: |
-        tar -czf ./output/DFS.tar.gz -C ./output DFS
+        tar -czf ./releases/DFS.tar.gz -C ./releases DFS
 
     - name: Upload Archive as artifact
       uses: actions/upload-artifact@v3
       with:
         name: DFS
         path: |
-          ./output/DFS.zip
-          ./output/DFS.tar.gz
+          ./releases/DFS.zip
+          ./releases/DFS.tar.gz
