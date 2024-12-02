@@ -23,7 +23,9 @@ jobs:
 
     - name: Install dependencies (Windows)
       run: |
-        dotnet restore
+        dotnet restore ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj
+        dotnet restore ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj
+        dotnet restore ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj
 
     - name: Publish Client (Windows)
       run: |
@@ -39,24 +41,16 @@ jobs:
 
     - name: Create ZIP file (Windows)
       run: |
-        # Clean up any existing DFS directory
-        Remove-Item -Recurse -Force ./releases/DFS
-
-        # Recreate the DFS folder and add files
         mkdir ./releases/DFS
-
-        # Copy the necessary files (adjust paths as needed)
         xcopy /E /I /H /Y ./src/publish/Client ./releases/DFS/Client
         xcopy /E /I /H /Y ./src/publish/Master ./releases/DFS/Master
         xcopy /E /I /H /Y ./src/publish/Worker ./releases/DFS/Worker
         xcopy /E /I /H /Y ./src/shared_dependencies ./releases/DFS/SharedDependencies
 
-        # Copy the start/stop scripts and README.txt
         copy ./src/Scripts/start.bat ./releases/DFS/start.bat
         copy ./src/Scripts/stop.bat ./releases/DFS/stop.bat
         copy README.txt ./releases/DFS/README.txt
 
-        # Compress the DFS folder into a ZIP file
         Compress-Archive -Path ./releases/DFS/* -DestinationPath ./releases/DFS.zip
 
     - name: Upload ZIP file (Windows)
@@ -79,7 +73,9 @@ jobs:
 
     - name: Install dependencies (Linux)
       run: |
-        dotnet restore
+        dotnet restore ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj
+        dotnet restore ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj
+        dotnet restore ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj
 
     - name: Publish Client (Linux)
       run: |
@@ -95,24 +91,20 @@ jobs:
 
     - name: Create TAR file (Linux)
       run: |
-        # Clean up any existing DFS directory
         rm -rf ./releases/DFS
 
         # Recreate the DFS folder and add files
         mkdir -p ./releases/DFS
 
-        # Copy the necessary files (adjust paths as needed)
         cp -r ./src/publish/Client ./releases/DFS/Client
         cp -r ./src/publish/Master ./releases/DFS/Master
         cp -r ./src/publish/Worker ./releases/DFS/Worker
         cp -r ./src/shared_dependencies ./releases/DFS/SharedDependencies
 
-        # Copy the start/stop scripts and README.txt
         cp ./src/Scripts/start.sh ./releases/DFS/start.sh
         cp ./src/Scripts/stop.sh ./releases/DFS/stop.sh
         cp README.txt ./releases/DFS/README.txt
 
-        # Create a TAR.GZ file from the DFS folder
         tar -czvf ./releases/DFS.tar.gz -C ./releases DFS
 
     - name: Upload TAR file (Linux)
