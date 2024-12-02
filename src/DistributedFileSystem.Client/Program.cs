@@ -1,99 +1,180 @@
-using DistributedFileSystem.MasterNode;
+using System.CommandLine;
+using System.CommandLine.Invocation;
+using System.IO;
+using System.Threading.Tasks;
 using Grpc.Net.Client;
+using DistributedFileSystem.MasterNode;
 
 class Program
 {
-    public static async Task Main(string[] args)
+    static async Task<int> Main(string[] args)
     {
-        var builder = WebApplication.CreateBuilder(args);
-        builder.Services.AddGrpc();
+        // Options for commands
+        var workerAddressOption = new Option<string>(
+            name: "--worker-address",
+            description: "Address of the worker node"
+        );
 
-        builder.Services.AddSingleton<MasterNode.MasterNodeClient>(provider =>
+        var filePathOption = new Option<string>(
+            name: "--file-path",
+            description: "Path to the file"
+        );
+
+        var rootCommand = new RootCommand("Distributed File System Command Line Interface");
+
+        // CreateNode Command
+        var createNodeCommand = new Command("CreateNode", "Create a new node")
         {
-            var channel = GrpcChannel.ForAddress("https://localhost:5001");
-            return new MasterNode.MasterNodeClient(channel);
-        });
-
-        var app = builder.Build();
-
-        app.MapGet("/", async context =>
+            workerAddressOption
+        };
+        createNodeCommand.SetHandler(async (workerAddress) =>
         {
-            await context.Response.WriteAsync("Client Node is running.");
-        });
+            var client = CreateGrpcClient();
+            var response = await client.CreateNodeAsync(new CreateNodeRequest { WorkerAddress = workerAddress });
+            Console.WriteLine(response.Message);
+        }, workerAddressOption);
+        rootCommand.AddCommand(createNodeCommand);
 
-        app.MapGet("/CreateNode", async (MasterNode.MasterNodeClient client) =>
+        // DeleteNode Command
+        var deleteNodeCommand = new Command("DeleteNode", "Delete a node")
         {
-            var response = await client.CreateNodeAsync(new CreateNodeRequest { WorkerAddress = "https://localhost:5003" });
-            return Results.Ok(response.Message);
-        });
+            workerAddressOption
+        };
+        deleteNodeCommand.SetHandler(async (workerAddress) =>
+        {
+            var client = CreateGrpcClient();
+            var response = await client.DeleteNodeAsync(new DeleteNodeRequest { WorkerAddress = workerAddress });
+            Console.WriteLine(response.Message);
+        }, workerAddressOption);
+        rootCommand.AddCommand(deleteNodeCommand);
 
-        app.MapGet("/DeleteNode", async (MasterNode.MasterNodeClient client) =>
+        // SingleStore Command
+        var singleStoreCommand = new Command("SingleStore", "Store a file chunk")
         {
-            var response = await client.DeleteNodeAsync(new DeleteNodeRequest { WorkerAddress = "https://localhost:5003" });
-            return Results.Ok(response.Message);
-        });
-
-        app.MapGet("/SingleStore", async (MasterNode.MasterNodeClient client) =>
+            filePathOption
+        };
+        singleStoreCommand.SetHandler(async (filePath) =>
         {
-            var chunkData = new byte[] { 0x01, 0x02, 0x03 };
-            var response = client.SingleStore(new SingleStoreRequest
+            var client = CreateGrpcClient();
+            if (!File.Exists(filePath))
             {
-                FileName = "example.txt",
+                Console.WriteLine("Error: The file does not exist.");
+                return;
+            }
+
+            var chunkData = await File.ReadAllBytesAsync(filePath);
+            var fileName = Path.GetFileName(filePath);
+            var response = await client.SingleStoreAsync(new SingleStoreRequest
+            {
+                FileName = fileName,
                 ChunkData = Google.Protobuf.ByteString.CopyFrom(chunkData),
                 ChunkSize = chunkData.Length
             });
-            return Results.Ok(response.Message);
-        });
+            Console.WriteLine(response.Message);
+        }, filePathOption);
+        rootCommand.AddCommand(singleStoreCommand);
 
-        app.MapGet("/ChunkLocations", async (MasterNode.MasterNodeClient client) =>
+        // ChunkLocations Command
+        var chunkLocationsCommand = new Command("ChunkLocations", "Get the chunk locations of a file")
         {
-            var response = await client.ChunkLocationsAsync(new ChunkLocationsRequest { FileName = "example.txt" });
-            return Results.Ok(response);
-        });
+            filePathOption
+        };
+        chunkLocationsCommand.SetHandler(async (filePath) =>
+        {
+            var fileName = Path.GetFileName(filePath);
+            var client = CreateGrpcClient();
+            var response = await client.ChunkLocationsAsync(new ChunkLocationsRequest { FileName = fileName });
+            Console.WriteLine(response);
+        }, filePathOption);
+        rootCommand.AddCommand(chunkLocationsCommand);
 
-        app.MapGet("/ListFiles", async (MasterNode.MasterNodeClient client) =>
+        // ListFiles Command
+        var listFilesCommand = new Command("ListFiles", "List all files");
+        listFilesCommand.SetHandler(async () =>
         {
+            var client = CreateGrpcClient();
             var response = await client.ListFilesAsync(new ListFilesRequest());
-            return Results.Ok(response.FileName);
+            foreach (var fileName in response.FileName)
+            {
+                Console.WriteLine(fileName);
+            }
         });
+        rootCommand.AddCommand(listFilesCommand);
 
-        app.MapGet("/GetWorkerResources", async (MasterNode.MasterNodeClient client) =>
+        // GetWorkerResources Command
+        var getWorkerResourcesCommand = new Command("GetWorkerResources", "Get resources of a worker")
         {
-            var response = await client.GetWorkerResourcesAsync(new GetWorkerResourcesRequest { WorkerAddress = "https://localhost:5003" });
-            return Results.Ok(response);
-        });
+            workerAddressOption
+        };
+        getWorkerResourcesCommand.SetHandler(async (workerAddress) =>
+        {
+            var client = CreateGrpcClient();
+            var response = await client.GetWorkerResourcesAsync(new GetWorkerResourcesRequest { WorkerAddress = workerAddress });
+            Console.WriteLine(response);
+        }, workerAddressOption);
+        rootCommand.AddCommand(getWorkerResourcesCommand);
 
-        app.MapGet("/DistributeFile", async (MasterNode.MasterNodeClient client, HttpContext context) =>
+        // DistributeFile Command
+        var distributeFileCommand = new Command("DistributeFile", "Distribute a file")
         {
-            var chunkData = new byte[] { 0x01, 0x02, 0x03 };
+            filePathOption
+        };
+        distributeFileCommand.SetHandler(async (filePath) =>
+        {
+            var client = CreateGrpcClient();
+            if (!File.Exists(filePath))
+            {
+                Console.WriteLine("Error: The file does not exist.");
+                return;
+            }
+
+            var chunkData = await File.ReadAllBytesAsync(filePath);
+            var fileName = Path.GetFileName(filePath);
             var request = new DistributeFileRequest
             {
-                FileName = "example.txt",
+                FileName = fileName,
                 FileData = Google.Protobuf.ByteString.CopyFrom(chunkData),
             };
 
             var response = await client.DistributeFileAsync(request);
-            return Results.Ok(response.Message);
-        });
+            Console.WriteLine(response.Message);
+        }, filePathOption);
+        rootCommand.AddCommand(distributeFileCommand);
 
-        app.MapGet("/RetrieveFile", async (MasterNode.MasterNodeClient client, HttpContext context) =>
+        // RetrieveFile Command
+        var retrieveFileCommand = new Command("RetrieveFile", "Retrieve a file")
         {
-            string fileName = "example.txt";
+            filePathOption
+        };
+        retrieveFileCommand.SetHandler(async (filePath) =>
+        {
+            var fileName = Path.GetFileName(filePath);
+            var client = CreateGrpcClient();
             var response = await client.RetrieveFileAsync(new RetrieveFileRequest { FileName = fileName });
-            return Results.Ok(response);
-        });
+            Console.WriteLine(response);
+        }, filePathOption);
+        rootCommand.AddCommand(retrieveFileCommand);
 
-        app.MapGet("/DeleteFile", async (MasterNode.MasterNodeClient client, HttpContext context) =>
+        // DeleteFile Command
+        var deleteFileCommand = new Command("DeleteFile", "Delete a file")
         {
-            string fileName = "example.txt";
+            filePathOption
+        };
+        deleteFileCommand.SetHandler(async (filePath) =>
+        {
+            var fileName = Path.GetFileName(filePath);
+            var client = CreateGrpcClient();
             var response = await client.DeleteFileAsync(new DeleteFileRequest { FileName = fileName });
-            return Results.Ok(response.Message);
-        });
+            Console.WriteLine(response.Message);
+        }, filePathOption);
+        rootCommand.AddCommand(deleteFileCommand);
 
+        return await rootCommand.InvokeAsync(args);
+    }
 
-        var url = "https://localhost:5000";
-        Console.WriteLine($"Client Node listening on {url}");
-
-        await app.RunAsync();
+    private static MasterNode.MasterNodeClient CreateGrpcClient()
+    {
+        var channel = GrpcChannel.ForAddress("https://localhost:5001");
+        return new MasterNode.MasterNodeClient(channel);
     }
 }
