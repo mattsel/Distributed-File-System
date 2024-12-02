@@ -28,38 +28,38 @@ their data via gRPC. This architecture is developed using C# with both Windows a
 
 ## Client Node
 
-The client node is where the user will interact with the Master Node. Currently the project is setup to use curl with the rpc's respective
-endpoint for simplicity. Long-term, the goal would be to introduce a front end with an interface to handle gRPC requests to the Master Node
-for a better user experience.
+The client node is where the user will interact with the Master Node. Currently the project is setup to use a cli interface for user's
+to interact with. Long term, the goal would be to develop a front end application that could interact with the C# backend to handle rpc
+request/responses.
 
 ### Functionality
 
-As an example as to how the user is able to interact with the client node to make requests is as follows:
+As an example as to how the user is able to interact with the client node to make requests is as follow.
 
-```csharp
-// Example gRPC request to the Master Node to create a new Worker Node in the network
-app.MapGet("/CreateNode", async (MasterNode.MasterNodeClient client) =>
-        {                                                                                     // Port to run Worker Node
-            var response = await client.CreateNodeAsync(new CreateNodeRequest { WorkerAddress = "https://localhost:5003" });
-            return Results.Ok(response.Message);
-        });
-
-// Example of how to delete a file from all Worker Node's that are storing that file's data
-app.MapGet("/DeleteFile", async (MasterNode.MasterNodeClient client, HttpContext context) =>
-        {
-            string fileName = "example.txt";                                    // Filename to delete
-            var response = await client.DeleteFileAsync(new DeleteFileRequest { FileName = fileName });
-            return Results.Ok(response.Message);
-        });
+1. Clone the repository:
+```plaintext
+PS C:\User\dev> git clone https://github.com/mattsel/Distributed-File-System.git
 ```
-
-Using these endpoints as an example, the user is able to interact with these endpoints via curl
-```markdown
-# Address that the client node is running on
-curl https://localhost:5000/CreateNode
-curl https://localhost:5000/DeleteFile
+2. Set an Alias (Optional)
+```plaintext
+PS C:\User\dev\Distributed-File-System> Set-Alias -Name DFS -Value C:\User\dev\Distributed-File-System\src\publish\DistributedFileSystem.Client.exe
 ```
-
+3. Run Script
+```plaintext
+PS C:\User\dev\Distributed-File-System\src\Scripts> .\run.ps1
+```
+4. Use the CLI
+```plaintext
+PS C:\User\dev\Distributed-File-System> DFS CreateNode --workerAddress "https://localhost:5003"
+PS C:\User\dev\Distributed-File-System> DFS DeleteNode --workerAddress "https://localhost:5003"
+PS C:\User\dev\Distributed-File-System> DFS SingleStore --file-path "C:\User\dev\file.txt"
+PS C:\User\dev\Distributed-File-System> DFS ChunkLocation --file-path "file.txt"
+PS C:\User\dev\Distributed-File-System> DFS ListFiles
+PS C:\User\dev\Distributed-File-System> DFS GetWorkerResources --workerAddress "https://localhost:5003"
+PS C:\User\dev\Distributed-File-System> DFS DistributeFile --file-path "C:\User\dev\file.txt"
+PS C:\User\dev\Distributed-File-System> DFS RetrieveFile --file-path "file.txt"
+PS C:\User\dev\Distributed-File-System> DFS DeleteFile --file-path "file.txt"
+```
 
 ## Master Node
 
