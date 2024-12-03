@@ -2,11 +2,8 @@ name: Package Application
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
 jobs:
   build_windows:
@@ -67,6 +64,13 @@ jobs:
         name: DFS-Windows
         path: ./releases/DFS.zip
 
+    - name: Create GitHub Release (Windows)
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./releases/DFS.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build_linux:
     runs-on: ubuntu-latest
 
@@ -119,3 +123,10 @@ jobs:
       with:
         name: DFS-Linux
         path: ./releases/DFS.tar.gz
+
+    - name: Create GitHub Release (Linux)
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./releases/DFS.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
