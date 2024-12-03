@@ -36,18 +36,16 @@ request/responses.
 
 As an example as to how the user is able to interact with the client node to make requests is as follow.
 
-1. Clone the repository:
+1. Download the Release:
 ```plaintext
-PS C:\User\dev> git clone https://github.com/mattsel/Distributed-File-System.git
+https://github.com/mattsel/Distributed-File-System/releases
 ```
-2. Set an Alias (Optional)
+
+2. Run the Start File (Batch/Bash)
 ```plaintext
-PS C:\User\dev\Distributed-File-System> Set-Alias -Name DFS -Value C:\User\dev\Distributed-File-System\src\publish\DistributedFileSystem.Client.exe
+PS C:\User\dev\DFS> .\start.bat
 ```
-3. Run Script
-```plaintext
-PS C:\User\dev\Distributed-File-System\src\Scripts> .\run.ps1
-```
+
 4. Use the CLI
 ```plaintext
 PS C:\User\dev\Distributed-File-System> DFS CreateNode --workerAddress "https://localhost:5003"
