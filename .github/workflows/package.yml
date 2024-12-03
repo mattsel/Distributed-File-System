@@ -1,0 +1,132 @@
+name: Package Application
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build_windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up .NET Core SDK (Windows)
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: '8.x'
+
+    - name: Install dependencies (Windows)
+      run: |
+        dotnet restore ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj
+        dotnet restore ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj
+        dotnet restore ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj
+
+    - name: Publish Client (Windows)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj -c Release -r win-x64 --self-contained -o ./src/publish/Client
+
+    - name: Publish MasterNode (Windows)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj -c Release -r win-x64 --self-contained -o ./src/publish/Master
+
+    - name: Publish WorkerNode (Windows)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj -c Release -r win-x64 --self-contained -o ./src/publish/Worker
+
+    - name: Create ZIP file (Windows)
+      run: |
+        if (!(Test-Path ./releases/DFS)) {
+          New-Item -Path ./releases/DFS -ItemType Directory
+        }
+
+        New-Item -Path ./releases/DFS/Client -ItemType Directory -Force
+        New-Item -Path ./releases/DFS/Master -ItemType Directory -Force
+        New-Item -Path ./releases/DFS/Worker -ItemType Directory -Force
+        New-Item -Path ./releases/DFS/SharedDependencies -ItemType Directory -Force
+
+        Copy-Item -Recurse -Force ./src/publish/Client/* ./releases/DFS/Client/
+        Copy-Item -Recurse -Force ./src/publish/Master/* ./releases/DFS/Master/
+        Copy-Item -Recurse -Force ./src/publish/Worker/* ./releases/DFS/Worker/
+        Copy-Item -Recurse -Force ./src/shared_dependencies/* ./releases/DFS/SharedDependencies/
+
+        Copy-Item ./src/Scripts/start.bat ./releases/DFS/start.bat
+        Copy-Item ./src/Scripts/stop.bat ./releases/DFS/stop.bat
+        Copy-Item README.md ./releases/DFS/README.md
+
+        Compress-Archive -Path ./releases/DFS/* -DestinationPath ./releases/DFS.zip
+
+    - name: Upload ZIP file (Windows)
+      uses: actions/upload-artifact@v3
+      with:
+        name: DFS-Windows
+        path: ./releases/DFS.zip
+
+    - name: Create GitHub Release (Windows)
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./releases/DFS.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up .NET Core SDK (Linux)
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: '8.x'
+
+    - name: Install dependencies (Linux)
+      run: |
+        dotnet restore ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj
+        dotnet restore ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj
+        dotnet restore ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj
+
+    - name: Publish Client (Linux)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.Client/DistributedFileSystem.Client.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Client
+
+    - name: Publish MasterNode (Linux)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.MasterNode/DistributedFileSystem.MasterNode.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Master
+
+    - name: Publish WorkerNode (Linux)
+      run: |
+        dotnet publish ./src/DistributedFileSystem.WorkerNode/DistributedFileSystem.WorkerNode.csproj -c Release -r linux-x64 --self-contained -o ./src/publish/Worker
+
+    - name: Create TAR file (Linux)
+      run: |
+        rm -rf ./releases/DFS
+
+        mkdir -p ./releases/DFS
+
+        cp -r ./src/publish/Client ./releases/DFS/Client
+        cp -r ./src/publish/Master ./releases/DFS/Master
+        cp -r ./src/publish/Worker ./releases/DFS/Worker
+        cp -r ./src/shared_dependencies ./releases/DFS/SharedDependencies
+
+        cp ./src/Scripts/start.sh ./releases/DFS/start.sh
+        cp ./src/Scripts/stop.sh ./releases/DFS/stop.sh
+        cp README.md ./releases/DFS/README.md
+
+        tar -czvf ./releases/DFS.tar.gz -C ./releases DFS
+
+    - name: Upload TAR file (Linux)
+      uses: actions/upload-artifact@v3
+      with:
+        name: DFS-Linux
+        path: ./releases/DFS.tar.gz
+
+    - name: Create GitHub Release (Linux)
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./releases/DFS.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
