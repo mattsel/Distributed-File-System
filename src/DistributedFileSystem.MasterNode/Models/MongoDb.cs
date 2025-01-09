@@ -27,4 +27,10 @@ namespace DistributedFileSystem.MasterNode.Models
         public string FileName { get; set; } = string.Empty;
         public Dictionary<string, string> Chunks { get; set; } = new Dictionary<string, string>();
     }
+
+    public class Counter
+    {
+        public string Name {get; set;} = string.Empty;
+        public int Value {get; set;}
+    }
 }

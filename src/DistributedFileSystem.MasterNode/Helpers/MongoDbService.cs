@@ -16,6 +16,7 @@ namespace DistributedFileSystem.MasterNode.Helpers
         private readonly IMongoCollection<WorkerMetadata> _workerCollection;
         private readonly ILogger<MongoDbService> _logger;
         private readonly MetricsCollector _metrics;
+        private readonly IMongoCollection<Counter> _counterCollection;
 
         public MongoDbService(IConfiguration configuration, ILogger<MongoDbService> logger, MetricsCollector metrics)
         {
@@ -23,9 +24,11 @@ namespace DistributedFileSystem.MasterNode.Helpers
             var connectionString = mongoSettings.GetValue<string>("ConnectionString");
             var databaseName = mongoSettings.GetValue<string>("Database");
             var collectionName = mongoSettings.GetValue<string>("Collection");
+            var counterName = mongoSetting.GetValue<string>("CounterCollection")
             var mongoClient = new MongoClient(connectionString);
             _database = mongoClient.GetDatabase(databaseName);
             _workerCollection = _database.GetCollection<WorkerMetadata>(collectionName);
+            _counterCollection = _database.GetCollection<Counter>(counterName)
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         }
@@ -241,14 +244,12 @@ namespace DistributedFileSystem.MasterNode.Helpers
 
                 if (file != null)
                 {
-                    var chunkIds = new List<string>();
-                    foreach (var chunk in file.Chunks)
-                    {
-                        chunkIds.Add(chunk.Key);
-                    }
-                    workerChunksList.Add(new KeyValuePair<string, List<string>>(worker.WorkerAddress, chunkIds));
+                    var chunkIds = file.Chunks.Keys.ToList();
+                    var sortedChunks = chunkIds.OrderBy(chunkKey => chunkKey).ToList();
+                    workerChunksList.Add(new KeyValuePair<string, List<string>>(worker.WorkerAddress, sortedChunks));
                 }
             }
+
             return workerChunksList;
         }
 
@@ -272,8 +273,7 @@ namespace DistributedFileSystem.MasterNode.Helpers
                     }
                 }
             }
-
-            return chunkIds;
+            return chunkIds.OrderBy(chunkId => chunkId).ToList();
         }
 
         // This will remove all instances of a filename from workers that contain this file
@@ -307,6 +307,30 @@ namespace DistributedFileSystem.MasterNode.Helpers
                 }
             }
             return workerAddressesWithFileRemoved;
+        }
+
+        public static string GenerateChunkID()
+        {
+            lock (typeof(SequentialIdGenerator))
+            {
+                var filter = Builders<Counter>.Filter.Eq(c => c.Name, "sequentialCounter");
+                var counterDocument = _counterCollection.Find(filter).FirstOrDefault();
+
+                if (counterDocument == null)
+                {
+                    counterDocument = new Counter
+                    {
+                        Name = "sequentialCounter",
+                        Value = 0
+                    };
+                    _counterCollection.InsertOne(counterDocument);
+                }
+                counterDocument.Value++;
+                var update = Builders<Counter>.Update.Set(c => c.Value, counterDocument.Value);
+                _counterCollection.UpdateOne(filter, update);
+
+                return counterDocument.Value.ToString("D10");
+            }
         }
     }
 }

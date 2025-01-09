@@ -128,7 +128,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
         {
             var channel = GrpcChannel.ForAddress(worker);
             var client = new WorkerNode.WorkerNodeClient(channel);
-            var chunkId = Guid.NewGuid().ToString();
+            var chunkId = _mongoDbService.GenerateChunkID()
             await _mongoDbService.UpdateWorkerStatus(worker, "working", request.FileName, chunkId);
 
             var workerRequest = new StoreChunkRequest { ChunkId = chunkId, ChunkData = request.ChunkData };
@@ -269,7 +269,7 @@ public class MasterNodeService : MasterNode.MasterNodeBase
             {
                 var worker = availableWorkers[i % availableWorkers.Count];
                 var chunk = chunks[i];
-                var chunkId = Guid.NewGuid().ToString();
+                var chunkId = _mongoDbService.GenerateChunkID()
                 tasks.Add(DistributeChunkToWorker(worker, chunk, chunkId, request.FileName));
             }
 
