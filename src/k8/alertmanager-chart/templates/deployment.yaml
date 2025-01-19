@@ -1,27 +1,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: alertmanager
+  name: {{ .Release.Name }}-alertmanager
   namespace: default
   labels:
-    app: alertmanager
+    app: {{ .Release.Name }}-alertmanager
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: alertmanager
+      app: {{ .Release.Name }}-alertmanager
   template:
     metadata:
       labels:
-        app: alertmanager
+        app: {{ .Release.Name }}-alertmanager
     spec:
       containers:
         - name: alertmanager
-          image: prom/alertmanager:latest
+          image: "{{ .Values.alertmanager.image.repository }}:{{ .Values.alertmanager.image.tag }}"
           ports:
             - containerPort: 9093
           volumeMounts:
-            - mountPath: /etc/alertmanager
+            - mountPath: /etc/alertmanager/alertmanager.yml
               name: alertmanager-config
               subPath: alertmanager.yml
               readOnly: true
@@ -29,42 +29,30 @@ spec:
             - name: SMTP_TO
               valueFrom:
                 secretKeyRef:
-                  name: alertmanager-secrets
+                  name: {{ .Release.Name }}-alertmanager-secrets
                   key: SMTP_TO
             - name: SMTP_FROM
               valueFrom:
                 secretKeyRef:
-                  name: alertmanager-secrets
+                  name: {{ .Release.Name }}-alertmanager-secrets
                   key: SMTP_FROM
             - name: SMTP_SMARTHOST
               valueFrom:
                 secretKeyRef:
-                  name: alertmanager-secrets
+                  name: {{ .Release.Name }}-alertmanager-secrets
                   key: SMTP_SMARTHOST
             - name: SMTP_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: alertmanager-secrets
+                  name: {{ .Release.Name }}-alertmanager-secrets
                   key: SMTP_USERNAME
             - name: SMTP_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: alertmanager-secrets
+                  name: {{ .Release.Name }}-alertmanager-secrets
                   key: SMTP_PASSWORD
       volumes:
         - name: alertmanager-config
-          secret:
-            secretName: alertmanager-secrets
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: alertmanager
-  namespace: default
-spec:
-  selector:
-    app: alertmanager
-  ports:
-    - port: 9093
-      targetPort: 9093
-  type: ClusterIP
+          configMap:
+            name: {{ .Release.Name }}-alertmanager-config
+

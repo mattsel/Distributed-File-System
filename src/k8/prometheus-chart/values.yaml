@@ -1,0 +1,8 @@
+prometheus:
+  image:
+    repository: prom/prometheus
+    tag: latest
+
+  tls:
+    insecure_skip_verify: true
+

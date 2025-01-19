@@ -1,0 +1,5 @@
+worker:
+  image:
+    repository: mattsel/distributed-file-system-worker
+    tag: latest
+  port: 5002

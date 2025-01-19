@@ -1,0 +1,5 @@
+client:
+  image:
+    repository: mattsel/distributed-file-system-client
+    tag: latest
+  port: 5000

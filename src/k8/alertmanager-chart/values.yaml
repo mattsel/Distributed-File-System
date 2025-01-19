@@ -1,0 +1,10 @@
+alertmanager:
+  smtp:
+    enabled: true  # Set to true to enable email notifications
+    host: "smtp.example.com"
+    port: 587
+    username: "smtp-user"
+    password: "smtp-password"
+    to: "alerts@example.com"
+    from: "alertmanager@example.com"
+

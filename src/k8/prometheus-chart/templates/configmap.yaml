@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: prometheus-config
+  name: {{ .Release.Name }}-prometheus-config
   labels:
     app: prometheus
 data:
@@ -19,19 +19,19 @@ data:
       - job_name: 'master_node'
         scheme: https
         static_configs:
-          - targets: ['master-service:5001']
+          - targets: ['{{ .Release.Name }}-master-service:5001']
         tls_config:
           insecure_skip_verify: true
 
       - job_name: 'worker_node'
         scheme: https
         static_configs:
-          - targets: ['worker-service:5002']
+          - targets: ['{{ .Release.Name }}-worker-service:5002']
         tls_config:
           insecure_skip_verify: true
 
     rule_files:
-      - '/etc/prometheus/rules/alert_rules.yml'  # Path to alert rules file
+      - '/etc/prometheus/rules/alert_rules.yml'
 
   alert_rules.yml: |
     groups:
@@ -63,3 +63,4 @@ data:
             annotations:
               summary: "Low disk space on worker {{ $labels.worker }}"
               description: "Available disk space on worker {{ $labels.worker }} is below 1GB for more than 10 minutes."
+
